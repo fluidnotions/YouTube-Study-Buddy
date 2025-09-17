@@ -12,22 +12,31 @@ from src.video_processor import VideoProcessor
 from src.knowledge_graph import KnowledgeGraph
 from src.study_notes_generator import StudyNotesGenerator
 from src.obsidian_linker import ObsidianLinker
+from src.yt_study_buddy.auto_categorizer import AutoCategorizer
+from src.yt_study_buddy.assessment_generator import AssessmentGenerator
 
 
 class YouTubeStudyNotes:
     """Main application class for processing YouTube videos into study notes."""
 
-    def __init__(self, subject=None, global_context=True, base_dir="Study notes", provider_type="api"):
+    def __init__(self, subject=None, global_context=True, base_dir="Study notes", provider_type="api",
+                 generate_assessments=True, auto_categorize=True):
         self.subject = subject
         self.global_context = global_context
         self.base_dir = base_dir
         self.output_dir = os.path.join(base_dir, subject) if subject else base_dir
         self.provider_type = provider_type
+        self.generate_assessments = generate_assessments
+        self.auto_categorize = auto_categorize and not subject  # Only auto-categorize when no subject provided
 
         self.video_processor = VideoProcessor(provider_type)
         self.knowledge_graph = KnowledgeGraph(base_dir, subject, global_context)
         self.notes_generator = StudyNotesGenerator()
         self.obsidian_linker = ObsidianLinker(base_dir, subject, global_context)
+
+        # Initialize new components
+        self.auto_categorizer = AutoCategorizer() if self.auto_categorize else None
+        self.assessment_generator = AssessmentGenerator(self.notes_generator.client) if generate_assessments else None
 
     def read_urls_from_file(self, filename='urls.txt'):
         """Read URLs from a text file, ignoring comments and empty lines."""
@@ -74,6 +83,22 @@ class YouTubeStudyNotes:
             print("Fetching video title...")
             video_title = self.video_processor.get_video_title(video_id)
 
+            # Auto-categorize if no subject provided
+            if self.auto_categorizer and not self.subject:
+                print("Auto-categorizing video content...")
+                detected_subject = self.auto_categorizer.categorize_video(
+                    transcript, video_title, self.base_dir
+                )
+                print(f"Detected subject: {detected_subject}")
+
+                # Update subject and output directory
+                self.subject = detected_subject
+                self.output_dir = os.path.join(self.base_dir, detected_subject)
+
+                # Reinitialize components with new subject
+                self.knowledge_graph = KnowledgeGraph(self.base_dir, detected_subject, self.global_context)
+                self.obsidian_linker = ObsidianLinker(self.base_dir, detected_subject, self.global_context)
+
             # Find related notes
             scope_msg = "globally" if self.global_context else f"within {self.subject} subject"
             print(f"Analyzing existing notes for connections ({scope_msg})...")
@@ -115,6 +140,26 @@ class YouTubeStudyNotes:
                 print("  Obsidian links added successfully")
             else:
                 print("  No additional links found")
+
+            # Generate assessment if enabled
+            if self.assessment_generator:
+                print("Generating learning assessment...")
+                try:
+                    assessment_content = self.assessment_generator.generate_assessment(
+                        transcript, study_notes, video_title, original_url
+                    )
+
+                    # Save assessment file
+                    assessment_filename = self.assessment_generator.create_assessment_filename(video_title)
+                    assessment_path = os.path.join(self.output_dir, assessment_filename)
+
+                    with open(assessment_path, 'w', encoding='utf-8') as f:
+                        f.write(assessment_content)
+
+                    print(f"  Assessment saved to {assessment_filename}")
+
+                except Exception as e:
+                    print(f"  Warning: Assessment generation failed: {e}")
 
             # Refresh knowledge graph cache to include the new note
             self.knowledge_graph.refresh_cache()
@@ -273,6 +318,8 @@ Output:
         parser.add_argument('--conservative', action='store_true', help='Conservative mode - longer delays, fewer retries')
         parser.add_argument('--method', '-m', choices=['api', 'scraper'], default='api',
                           help='Transcript extraction method: api (YouTube API) or scraper (web scraping)')
+        parser.add_argument('--no-assessments', action='store_true', help='Disable assessment generation')
+        parser.add_argument('--no-auto-categorize', action='store_true', help='Disable auto-categorization')
         parser.add_argument('--help', '-h', action='store_true', help='Show help message')
 
         args = parser.parse_args()
@@ -310,5 +357,30 @@ Output:
 
 
 if __name__ == "__main__":
-    app = YouTubeStudyNotes()
+    # Parse arguments first to get configuration options
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--no-assessments', action='store_true')
+    parser.add_argument('--no-auto-categorize', action='store_true')
+    # Add all other arguments but only parse the options we need for initialization
+    parser.add_argument('--subject', '-s')
+    parser.add_argument('--subject-only', action='store_true')
+    parser.add_argument('--method', '-m', default='api')
+    parser.add_argument('--help', '-h', action='store_true')
+    parser.add_argument('url', nargs='?')
+    parser.add_argument('--batch', '-b', action='store_true')
+    parser.add_argument('--file', '-f', default='urls.txt')
+    parser.add_argument('--delay', '-d', type=int, default=3)
+    parser.add_argument('--aggressive', action='store_true')
+    parser.add_argument('--conservative', action='store_true')
+
+    args, _ = parser.parse_known_args()  # Parse known args, ignore unknown
+
+    # Create app instance with configuration
+    app = YouTubeStudyNotes(
+        subject=args.subject,
+        global_context=not args.subject_only,
+        provider_type=args.method,
+        generate_assessments=not args.no_assessments,
+        auto_categorize=not args.no_auto_categorize
+    )
     app.main()

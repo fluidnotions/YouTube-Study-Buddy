@@ -1,20 +1,54 @@
-# YouTube to Study Notes
+# YT Study Buddy
 
-Convert YouTube videos into comprehensive study notes with automatic cross-referencing between related topics.
+Watching educational YouTube videos but struggling to retain the information? Manually taking notes slows you down, and you lose track of connections between concepts across different videos. **YT Study Buddy** transforms any YouTube video into structured study notes with intelligent cross-referencing that builds your personal knowledge graph over time.
 
-## Features
+## 💰 Why This Tool Exists (Free vs Paid Alternatives)
 
-- **Automatic Transcript Extraction** from YouTube videos
-- **AI-Generated Study Notes** using Claude API with structured sections
-- **Cross-Reference System** that connects related concepts across your note collection
-- **Obsidian Auto-Linking** - Automatically creates `[[links]]` between related notes using fuzzy matching
-- **Batch Processing** for multiple videos at once
-- **Markdown Output** with proper titles and YouTube links
-- **Knowledge Graph** that grows smarter with each video processed
+Most AI-powered YouTube note-taking solutions in 2025 require expensive subscriptions or have significant limitations:
+
+**Paid Solutions ($10-50+/month):**
+- **NoteGPT** - Comprehensive AI learning assistant (premium features require subscription)
+- **Notta** - Professional transcription service (98.86% accuracy, limited free tier)
+- **Eightify** - AI video summarizer (subscription for unlimited summaries)
+- **Maestra** - Multi-language support (subscription for full feature access)
+
+**Free Alternatives (Limited Features):**
+- **Basic transcript generators** - No AI analysis, just raw text extraction
+- **Tactiq** - Chrome extension transcription (no study note formatting)
+- **YouTube auto-captions** - Inaccurate, no structure or cross-referencing
+- **Manual note-taking** - Time-consuming, no automation or connections
+
+**YT Study Buddy is completely free** and provides AI-powered study note generation with intelligent cross-referencing and Obsidian integration. Perfect for students, lifelong learners, and professionals who want to build a connected knowledge base without subscription costs.
+
+Unlike simple transcript extractors, YT Study Buddy creates **structured study materials** with cross-references that grow smarter with each video you process, building an interconnected web of knowledge over time.
+
+## Key Features
+- **AI-Powered Study Notes** – Transforms raw transcripts into structured learning materials with defined sections
+- **Intelligent Cross-Referencing** – Automatically connects related concepts across your entire note collection
+- **Obsidian Integration** – Creates `[[wiki-style]]` links for seamless knowledge graph building
+- **Subject Organization** – Organize notes by topic with global or subject-specific cross-referencing
+- **Batch Processing** – Process multiple videos efficiently with URL file support
+- **Knowledge Graph Growth** – Each new video strengthens connections in your existing knowledge base
+
+## Why It Matters
+
+For students, researchers, and lifelong learners, this solves the pain of information overload and disconnected knowledge. Instead of isolated notes that sit unused, you get **interconnected study materials** that reveal patterns, reinforce learning, and help you build genuine understanding across topics.
+
+## Technical
+
+YT Study Buddy integrates with the Claude AI API for intelligent note generation and uses fuzzy matching algorithms to identify conceptual connections across your knowledge base. Built for Python 3.10+ and designed to work seamlessly with Obsidian's linking system.
 
 ## Setup
 
 1. **Install Dependencies**
+
+   **Option 1: Poetry (Recommended)**
+   ```bash
+   pip install poetry
+   poetry install
+   ```
+
+   **Option 2: pip**
    ```bash
    pip install -r requirements.txt
    ```
@@ -67,7 +101,7 @@ python main.py --batch
 | `--batch` | Process multiple URLs from file |
 | `--file <filename>` | Use custom URL file (default: urls.txt) |
 
-### Advanced Options
+### Command Line Examples
 ```bash
 # Custom URL file
 python main.py --subject "Data Science" --batch --file my_videos.txt
@@ -79,9 +113,9 @@ python main.py
 python main.py --help
 ```
 
-## File Formats
+## URLs File Format
 
-### URLs File (`urls.txt`)
+Create a `urls.txt` file with one YouTube URL per line:
 ```
 https://www.youtube.com/watch?v=abc123
 https://youtu.be/def456
@@ -94,35 +128,45 @@ https://www.youtube.com/watch?v=ghi789
 Files are saved as `Study notes/Subject Name/Video_Title.md`. Here's an example of generated output:
 
 ```markdown
-# How to Build a Startup in 2024
+# Attention Is All You Need - Transformers Explained
 
-[YouTube Video](https://www.youtube.com/watch?v=abc123)
+[YouTube Video](https://www.youtube.com/watch?v=kCc8FmEb1nY)
 
 ---
 
-# Video Study Notes
-
 ## Core Concepts
-- Lean startup methodology focuses on rapid iteration
-- Product-market fit is the primary goal before scaling
+- **Self-attention mechanism** replaces recurrent and convolutional layers entirely
+- **Multi-head attention** allows model to attend to information from different representation subspaces
+- **Positional encoding** provides sequence order information without recurrence
 
 ## Key Points
-1. Start with a minimum viable product (MVP)
-2. Validate assumptions through customer interviews
-3. Pivot based on data, not opinions
+1. **Encoder-Decoder Architecture**: Stack of 6 identical layers in both encoder and decoder
+2. **Attention Function**: Mapping query and key-value pairs to output weights
+3. **Scaled Dot-Product Attention**: Attention(Q,K,V) = softmax(QK^T/√dk)V
 
 ## Connections & Relationships
-This connects to your 'Product Management Basics' notes - both cover MVP development and customer validation strategies.
+This connects to your [[Neural Machine Translation]] and [[BERT Architecture]] notes - all use attention mechanisms but Transformers eliminate the need for RNNs entirely.
 
 ## Questions for Further Study
-What metrics best indicate product-market fit has been achieved?
+- How does the computational complexity of O(n²d) for self-attention compare to O(nd²) for recurrent layers?
+- What are the trade-offs between multi-head attention and single attention mechanisms?
 
 ## Action Items & Practice
-1. Interview 5 potential customers about their current solutions
-2. Build an MVP with core features only
+1. Implement basic self-attention mechanism from scratch
+2. Compare Transformer performance vs LSTM on sequence tasks
+3. Experiment with different numbers of attention heads
 ```
 
-*Note: This is just an example - the actual content will vary based on your video's topic and existing notes.*
+## Recommended Workflow
+
+YT Study Buddy is designed for this efficient learning process:
+
+1. **Build Your Video List** - Collect interesting YouTube URLs in `urls.txt` as you discover them
+2. **Generate All Notes First** - Run batch processing to create structured notes for all videos at once
+3. **Copy to Infinite Canvas** - Import generated notes into Miro, Concepts, or similar stylus-friendly tools
+4. **Watch with Notes Available** - Use the summary notes for highlighting, adding thoughts, and active learning
+
+Perfect for stylus-based mind mapping and visual learning workflows!
 
 ## Cross-Referencing
 
@@ -132,15 +176,13 @@ The tool automatically:
 - Adds connection notes in the "Connections & Relationships" section
 - Builds a growing knowledge web across all your study materials
 
-Perfect for stylus-based mind mapping and visual learning!
-
 ## Output Structure
 
-All notes are saved in `study_notes_output/` with:
+Notes are saved in `study_notes_output/` with:
 - **Filename**: Based on actual video title
 - **Header**: Video title + YouTube link
-- **Sections**: Core Concepts, Key Points, Examples, Definitions, Connections, Questions, Action Items, Critical Analysis
-- **Cross-references**: Automatic mentions of related notes when applicable
+- **Sections**: Core Concepts, Key Points, Connections & Relationships, Questions for Further Study, Action Items & Practice
+- **Cross-references**: Automatic `[[wiki-style]]` links to related notes when concepts overlap
 
 ## Requirements
 

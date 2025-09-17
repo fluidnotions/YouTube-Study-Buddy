@@ -14,43 +14,31 @@ Learning from educational YouTube videos and want to maximize retention and buil
 
 **Result:** Instead of passive consumption, you get an active learning system with notes AND assessment questions that test understanding beyond surface-level recall.
 
-## 💰 Why This Tool Exists (Free vs Paid Alternatives)
+## 💰 Free vs Paid Alternatives
 
-Most AI-powered YouTube note-taking solutions in 2025 require expensive subscriptions or have significant limitations:
+**Paid ($10-50+/month):** NoteGPT, Notta, Eightify, Maestra – all require subscriptions for full features
 
-**Paid Solutions ($10-50+/month):**
-- **NoteGPT** - Comprehensive AI learning assistant (premium features require subscription)
-- **Notta** - Professional transcription service (98.86% accuracy, limited free tier)
-- **Eightify** - AI video summarizer (subscription for unlimited summaries)
-- **Maestra** - Multi-language support (subscription for full feature access)
+**Free (Limited):** Basic transcripts, no AI analysis, no cross-referencing, no assessments
 
-**Free Alternatives (Limited Features):**
-- **Basic transcript generators** - No AI analysis, just raw text extraction
-- **Tactiq** - Chrome extension transcription (no study note formatting)
-- **YouTube auto-captions** - Inaccurate, no structure or cross-referencing
-- **Manual note-taking** - Time-consuming, no automation or connections
-
-**YT Study Buddy is completely free** and provides AI-powered study note generation with intelligent cross-referencing and Obsidian integration. Perfect for students, lifelong learners, and professionals who want to build a connected knowledge base without subscription costs.
-
-Unlike simple transcript extractors, YT Study Buddy creates **structured study materials** with cross-references that grow smarter with each video you process, building an interconnected web of knowledge over time.
+**YT Study Buddy:** Completely free with AI-powered notes, learning assessments, auto-categorization, and knowledge graph building. No subscriptions, no limits.
 
 ## Key Features
 - **AI-Powered Study Notes** – Transforms raw transcripts into structured learning materials with defined sections
 - **Learning Assessments** – Generates 4 question types including unique "One-Up Challenges" that ask you to improve upon what you learned
-- **Auto-Categorization** – ML-powered subject detection organizes your knowledge base automatically
-- **Intelligent Cross-Referencing** – Automatically connects related concepts across your entire note collection
+- **Smart Auto-Categorization** – When no subject specified, ML model detects best-fit from existing folders or creates new ones
+- **Intelligent Cross-Referencing** – Same ML model finds semantically related concepts across your entire note collection
 - **Obsidian Integration** – Creates `[[wiki-style]]` links for seamless knowledge graph building
-- **Subject Organization** – Organize notes by topic with global or subject-specific cross-referencing
+- **Subject Override** – Use `--subject` flag to bypass auto-categorization when you know where content belongs
 - **Batch Processing** – Process multiple videos efficiently with URL file support
 - **Knowledge Graph Growth** – Each new video strengthens connections in your existing knowledge base
 
-## Why It Matters
+## Technical Stack
 
-For students, researchers, and lifelong learners, this solves the pain of information overload and disconnected knowledge. Instead of isolated notes that sit unused, you get **interconnected study materials** that reveal patterns, reinforce learning, and help you build genuine understanding across topics.
-
-## Technical
-
-YT Study Buddy integrates with the Claude AI API for intelligent note generation and uses fuzzy matching algorithms to identify conceptual connections across your knowledge base. Built for Python 3.10+ and designed to work seamlessly with Obsidian's linking system.
+- **Python 3.13+** with Poetry package management
+- **Claude AI API** – Generates notes and assessment questions (remote)
+- **Sentence Transformers** – One local ML model powers both auto-categorization AND semantic cross-referencing
+- **Graceful Fallbacks** – Works without ML models (manual subject + keyword matching)
+- **Obsidian-compatible** Markdown with wiki-style linking
 
 ## Setup
 
@@ -96,11 +84,14 @@ YT Study Buddy integrates with the Claude AI API for intelligent note generation
 
 ### Using Poetry (Recommended)
 ```bash
-# Process single video for a subject (global cross-referencing)
+# Manual subject (bypasses auto-categorization)
 yt-study-buddy --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
 
-# Batch process URLs for a subject (global cross-referencing)
-yt-study-buddy --subject "Python Programming" --batch
+# Auto-categorization (ML model picks best subject folder)
+yt-study-buddy "https://youtube.com/watch?v=xyz"
+
+# Batch with auto-categorization
+yt-study-buddy --batch
 
 # Subject-only cross-referencing (no global connections)
 yt-study-buddy --subject "AI Ethics" --subject-only --batch
@@ -171,49 +162,51 @@ yt-dlp --get-title --get-url --flat-playlist "https://www.youtube.com/playlist?l
 
 This eliminates the tedious manual process of copying URLs from your playlists!
 
-### Generated Notes Example
-Files are saved as `Study notes/Subject Name/Video_Title.md`. Here's an example of generated output:
+### Generated Output Examples
 
+**Notes File:** `Transformers_Explained.md`
 ```markdown
 # Attention Is All You Need - Transformers Explained
-
 [YouTube Video](https://www.youtube.com/watch?v=kCc8FmEb1nY)
 
----
-
 ## Core Concepts
-- **Self-attention mechanism** replaces recurrent and convolutional layers entirely
-- **Multi-head attention** allows model to attend to information from different representation subspaces
-- **Positional encoding** provides sequence order information without recurrence
-
-## Key Points
-1. **Encoder-Decoder Architecture**: Stack of 6 identical layers in both encoder and decoder
-2. **Attention Function**: Mapping query and key-value pairs to output weights
-3. **Scaled Dot-Product Attention**: Attention(Q,K,V) = softmax(QK^T/√dk)V
+- **Self-attention mechanism** replaces recurrent layers entirely
+- **Multi-head attention** allows attending to different representation subspaces
+- **Positional encoding** provides sequence order information
 
 ## Connections & Relationships
-This connects to your [[Neural Machine Translation]] and [[BERT Architecture]] notes - all use attention mechanisms but Transformers eliminate the need for RNNs entirely.
-
-## Questions for Further Study
-- How does the computational complexity of O(n²d) for self-attention compare to O(nd²) for recurrent layers?
-- What are the trade-offs between multi-head attention and single attention mechanisms?
-
-## Action Items & Practice
-1. Implement basic self-attention mechanism from scratch
-2. Compare Transformer performance vs LSTM on sequence tasks
-3. Experiment with different numbers of attention heads
+This connects to your [[Neural Machine Translation]] and [[BERT Architecture]] notes...
 ```
 
-## Recommended Workflow
+**Assessment File:** `Transformers_Explained_Assessment.md`
+```markdown
+# Learning Assessment
 
-YT Study Buddy is designed for this efficient learning process:
+## Gap Analysis
+Q: What complexity details were mentioned but not captured in notes?
+Your Answer: [Write here]
 
-1. **Curate Your Learning Content** - Add interesting videos to YouTube playlists, then extract URLs using `yt-dlp` to build your `urls.txt` file
-2. **Generate All Notes First** - Run batch processing to create structured notes for all videos at once
-3. **Copy to Infinite Canvas** - Import generated notes into Miro, Concepts, or similar stylus-friendly tools
-4. **Transform Notes into Active Learning Artifacts** – Pre-written, structured notes free you from transcription and let you focus on highlighting, annotating, and visually connecting concepts. By clustering related ideas, drawing links, and layering in your own commentary, you move from passive reading to active engagement. This approach reflects principles of active learning and dual coding—combining text with spatial and visual relationships—which is shown to enhance understanding and retention.
+## Application
+Q: How would you implement this for real-time inference on mobile?
+Your Answer: [Write here]
 
-Perfect for stylus-based mind mapping and visual learning workflows!
+## One-Up Challenge
+Q: The video shows O(n²) complexity. How would you optimize for 100k+ tokens?
+Your Answer: [Write here]
+
+## Synthesis
+Q: How does this relate to graph neural networks?
+Your Answer: [Write here]
+
+[Model answers at bottom of file for self-checking]
+```
+
+## Workflow
+
+1. **Curate** – Add videos to YouTube playlists, extract URLs with `yt-dlp` → `urls.txt`
+2. **Generate** – Batch process all videos → notes + assessments in organized folders
+3. **Canvas** – Import into Miro/Concepts for spatial learning with stylus
+4. **Learn Actively** – Review notes, attempt assessments, make visual connections
 
 ## Assessment System
 
@@ -233,49 +226,19 @@ Instead of asking "What did you learn?", we ask **"How would you make it better?
 
 This transforms learners from **knowledge consumers into knowledge creators**.
 
-### Assessment Storage & Workflow
+### Where Files Are Saved
 
-**Where assessments are stored:**
-- Assessment files are saved **alongside your notes** in the same subject folder
-- File naming: `Video_Title_Assessment.md` (companion to `Video_Title.md` notes)
-- Example structure:
-  ```
-  Study notes/
-  ├── Machine Learning/
-  │   ├── Transformer_Architecture.md          (notes)
-  │   ├── Transformer_Architecture_Assessment.md  (questions)
-  │   ├── Neural_Networks_Basics.md           (notes)
-  │   └── Neural_Networks_Basics_Assessment.md   (questions)
-  ```
+```
+Study notes/
+├── Machine Learning/
+│   ├── Video_Title.md           # Notes
+│   └── Video_Title_Assessment.md # Questions
+```
 
-**Intended workflow:**
-1. Generate notes and assessments for multiple videos
-2. Import both into your canvas tool (Miro, Concepts, etc.)
-3. Review notes first to refresh understanding
-4. Attempt assessment questions without looking at notes
-5. Check your answers against the model answers at the bottom
-6. Use the feedback to identify areas needing deeper study
-
-This separation ensures assessments serve as **active learning checkpoints** rather than passive reference material.
-
-## Cross-Referencing
-
-The tool automatically:
-- Analyzes existing notes for key concepts
-- Identifies related topics in new videos
-- Adds connection notes in the "Connections & Relationships" section
-- Builds a growing knowledge web across all your study materials
-
-## Output Structure
-
-Notes are saved in `study_notes_output/` with:
-- **Filename**: Based on actual video title
-- **Header**: Video title + YouTube link
-- **Sections**: Core Concepts, Key Points, Connections & Relationships, Questions for Further Study, Action Items & Practice
-- **Cross-references**: Automatic `[[wiki-style]]` links to related notes when concepts overlap
+Assessments are **active learning checkpoints**
 
 ## Requirements
 
-- Python 3.10+
-- Claude API key
-- Internet connection for YouTube and Claude API access
+- Python 3.13+ with Poetry
+- Claude API key (from console.anthropic.com)
+- Optional: Sentence transformer models (auto-downloads on first use)

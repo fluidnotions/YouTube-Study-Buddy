@@ -6,11 +6,18 @@ Provides a user-friendly web interface for processing YouTube videos into study 
 
 import streamlit as st
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
+
+# Add src directory to path
+current_dir = Path(__file__).parent
+src_dir = current_dir / "src"
+sys.path.insert(0, str(src_dir))
+
 from main import YouTubeStudyNotes
-from src.knowledge_graph import KnowledgeGraph
+from yt_study_buddy.knowledge_graph import KnowledgeGraph
 
 
 def initialize_session_state():

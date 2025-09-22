@@ -7,13 +7,19 @@ import sys
 import os
 import argparse
 import time
+from pathlib import Path
 
-from src.video_processor import VideoProcessor
-from src.knowledge_graph import KnowledgeGraph
-from src.study_notes_generator import StudyNotesGenerator
-from src.obsidian_linker import ObsidianLinker
-from src.yt_study_buddy.auto_categorizer import AutoCategorizer
-from src.yt_study_buddy.assessment_generator import AssessmentGenerator
+# Add src directory to path
+current_dir = Path(__file__).parent
+src_dir = current_dir / "src"
+sys.path.insert(0, str(src_dir))
+
+from yt_study_buddy.video_processor import VideoProcessor
+from yt_study_buddy.knowledge_graph import KnowledgeGraph
+from yt_study_buddy.study_notes_generator import StudyNotesGenerator
+from yt_study_buddy.obsidian_linker import ObsidianLinker
+from yt_study_buddy.auto_categorizer import AutoCategorizer
+from yt_study_buddy.assessment_generator import AssessmentGenerator
 
 
 class YouTubeStudyNotes:

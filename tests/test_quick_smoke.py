@@ -16,11 +16,11 @@ sys.path.insert(0, str(project_root / "src"))
 def test_imports():
     """Test that all main modules can be imported."""
     try:
-        from src.video_processor import VideoProcessor
-        from src.transcript_provider import create_transcript_provider
-        from src.knowledge_graph import KnowledgeGraph
-        from src.study_notes_generator import StudyNotesGenerator
-        from src.obsidian_linker import ObsidianLinker
+        from yt_study_buddy.video_processor import VideoProcessor
+        from yt_study_buddy.transcript_provider import create_transcript_provider
+        from yt_study_buddy.knowledge_graph import KnowledgeGraph
+        from yt_study_buddy.study_notes_generator import StudyNotesGenerator
+        from yt_study_buddy.obsidian_linker import ObsidianLinker
         from main import YouTubeStudyNotes
 
         # Basic instantiation
@@ -34,7 +34,7 @@ def test_imports():
 @pytest.mark.unit
 def test_video_id_extraction():
     """Quick test of video ID extraction."""
-    from src.video_processor import VideoProcessor
+    from yt_study_buddy.video_processor import VideoProcessor
 
     processor = VideoProcessor()
 
@@ -52,7 +52,7 @@ def test_video_id_extraction():
 @pytest.mark.unit
 def test_provider_factory():
     """Test transcript provider factory."""
-    from src.transcript_provider import create_transcript_provider
+    from yt_study_buddy.transcript_provider import create_transcript_provider
 
     api_provider = create_transcript_provider("api")
     scraper_provider = create_transcript_provider("scraper")
@@ -66,7 +66,7 @@ def test_provider_factory():
 @pytest.mark.unit
 def test_file_sanitization():
     """Test filename sanitization."""
-    from src.video_processor import VideoProcessor
+    from yt_study_buddy.video_processor import VideoProcessor
 
     test_cases = [
         ("Valid Filename", "Valid Filename"),

@@ -3,7 +3,7 @@ Tests for transcript provider interfaces and implementations.
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from src.transcript_provider import (
+from yt_study_buddy.transcript_provider import (
     TranscriptProvider,
     AbstractTranscriptProvider,
     APITranscriptProvider,

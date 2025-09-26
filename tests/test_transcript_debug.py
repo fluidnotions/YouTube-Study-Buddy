@@ -20,7 +20,7 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from src.video_processor import VideoProcessor
+    from yt_study_buddy.video_processor import VideoProcessor
     print("✓ VideoProcessor imported successfully")
 except ImportError as e:
     print(f"✗ Failed to import VideoProcessor: {e}")

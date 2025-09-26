@@ -8,7 +8,7 @@ import os
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '.'))
 
-from src.video_processor import VideoProcessor
+from yt_study_buddy.video_processor import VideoProcessor
 
 
 def test_provider(provider_type: str, video_url: str):

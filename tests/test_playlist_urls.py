@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
-    from src.video_processor import VideoProcessor
+    from yt_study_buddy.video_processor import VideoProcessor
     print("✓ Libraries imported successfully")
 except ImportError as e:
     print(f"✗ Import failed: {e}")

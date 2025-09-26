@@ -21,43 +21,40 @@ python run_tests.py all
 python run_tests.py coverage
 ```
 
-## VSCode Integration
+## PyCharm Professional Integration
 
 ### Setup
-1. Open the project in VSCode
-2. Install the Python extension
-3. Tests should be auto-discovered in the Test Explorer
+1. Open the project in PyCharm Professional
+2. Configure Poetry interpreter (see Python Interpreter Configuration below)
+3. Tests should be auto-discovered in the Test Runner
 
-### Running Tests in VSCode
+### Running Tests in PyCharm
 
-#### Method 1: Test Explorer
-- Open Test Explorer panel (sidebar)
+#### Method 1: Test Runner Panel
+- Open Test Runner panel (bottom toolbar)
 - Click play button next to individual tests or test files
-- View results in the explorer
+- View results with detailed output
 
-#### Method 2: Command Palette
-- Press `Ctrl+Shift+P`
-- Type "Python: Run All Tests" or "Python: Debug All Tests"
+#### Method 2: Right-Click Context Menu
+- Right-click on test file or function
+- Select "Run" or "Debug" from context menu
 
-#### Method 3: Debug Configuration
-- Press `F5` and select test configuration:
-  - "Debug All Tests" - Run all tests with debugger
-  - "Debug Unit Tests Only" - Run only unit tests
-  - "Debug Integration Tests" - Run integration tests
-  - "Debug Current Test File" - Debug the currently open test file
-
-#### Method 4: Tasks
-- Press `Ctrl+Shift+P` -> "Tasks: Run Task"
-- Select from available test tasks:
+#### Method 3: Run Configurations
+- Use pre-configured run configurations:
   - "Run Unit Tests"
   - "Run All Tests"
-  - "Run Tests with Coverage"
-  - "Run Quick Smoke Tests"
+  - "Run Integration Tests"
+  - "Debug Current Test File"
+
+#### Method 4: Gutter Icons
+- Click the green play button next to test functions
+- Use the debug button for breakpoint debugging
 
 ### Debugging Tests
-1. Set breakpoints in test files or source code
-2. Use "Debug Current Test File" configuration
-3. Or right-click on test function -> "Debug Test"
+1. Set breakpoints in test files or source code (click in gutter)
+2. Right-click test -> "Debug Test"
+3. Use Variables and Console tabs for inspection
+4. Step through code using F7 (step into), F8 (step over)
 
 ## Test Categories
 
@@ -156,15 +153,31 @@ python run_tests.py specific tests/test_video_processor.py::TestVideoProcessor
 - Output formatting
 - Warning filters
 
-### `.vscode/settings.json`
-- VSCode test discovery
-- Python path configuration
-- Test framework settings
+## PyCharm Configuration
 
-### `.vscode/launch.json`
-- Debug configurations for tests
-- Environment variable setup
-- PYTHONPATH configuration
+### Python Interpreter Configuration
+1. **File** → **Settings** → **Project** → **Python Interpreter**
+2. Click the gear icon → **Add**
+3. Select **Poetry Environment**
+4. Choose **Existing environment** if Poetry is already set up
+5. Point to: `D:\Documents\career transformation\ml_mono_repo\ytstudybuddy\.venv\Scripts\python.exe`
+
+### Project Structure Configuration
+1. **File** → **Settings** → **Project** → **Project Structure**
+2. Mark `src` folder as **Sources Root** (blue folder icon)
+3. Mark `tests` folder as **Test Sources Root** (green folder icon)
+4. This ensures proper import resolution
+
+### Jupyter Notebook Configuration
+1. **File** → **Settings** → **Languages & Frameworks** → **Jupyter**
+2. Ensure **Jupyter server** is set to use project interpreter
+3. Configure **Startup timeout** if needed (default: 10 seconds)
+4. Check **Run cells below** option for better workflow
+
+### Test Framework Configuration
+1. **File** → **Settings** → **Tools** → **Python Integrated Tools**
+2. Set **Default test runner** to **pytest**
+3. Ensure **Project interpreter** matches Poetry environment
 
 ## Coverage Reports
 
@@ -183,16 +196,25 @@ xdg-open htmlcov/index.html # Linux
 
 ## Troubleshooting
 
-### Tests Not Discovered in VSCode
-1. Check Python interpreter is set correctly
-2. Ensure pytest is installed: `pip install pytest`
-3. Reload window: `Ctrl+Shift+P` -> "Developer: Reload Window"
-4. Check `.vscode/settings.json` configuration
+### Jupyter Notebooks Not Working in PyCharm
+1. **Check Python interpreter**: Ensure it's set to Poetry environment
+2. **Verify Jupyter installation**: `poetry run jupyter --version`
+3. **Restart Jupyter server**: In PyCharm, go to Tools → Stop Jupyter Server, then restart
+4. **Check project structure**: Ensure `src` is marked as Sources Root
+5. **Clear caches**: File → Invalidate Caches and Restart
 
-### Import Errors
-1. Verify PYTHONPATH includes `src/` directory
-2. Check that `__init__.py` files exist
-3. Use absolute imports in test files
+### Tests Not Discovered in PyCharm
+1. Check Python interpreter matches Poetry environment
+2. Ensure pytest is installed: `poetry show pytest`
+3. Mark `tests` folder as Test Sources Root
+4. Invalidate caches and restart PyCharm
+5. Check Run Configuration templates
+
+### Import Errors in Notebooks/Tests
+1. Verify project structure: `src` should be Sources Root
+2. Check Poetry environment is active
+3. Ensure `__init__.py` files exist in packages
+4. Use absolute imports from project root
 
 ### External API Test Failures
 1. Check internet connection

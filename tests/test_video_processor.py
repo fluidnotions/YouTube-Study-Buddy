@@ -3,7 +3,7 @@ Tests for VideoProcessor class and URL handling.
 """
 import pytest
 from unittest.mock import patch, Mock
-from src.video_processor import VideoProcessor
+from yt_study_buddy.video_processor import VideoProcessor
 
 
 class TestVideoProcessor:

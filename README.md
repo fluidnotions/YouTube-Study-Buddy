@@ -34,7 +34,7 @@ Learning from educational YouTube videos and want to maximize retention and buil
 
 ## Technical Stack
 
-- **Python 3.13+** with Poetry package management
+- **Python 3.13+** with UV package management
 - **Claude AI API** – Generates notes and assessment questions (remote)
 - **Sentence Transformers** – One local ML model powers both auto-categorization AND semantic cross-referencing
 - **Graceful Fallbacks** – Works without ML models (manual subject + keyword matching)
@@ -44,10 +44,10 @@ Learning from educational YouTube videos and want to maximize retention and buil
 
 1. **Install Dependencies**
 
-   **Option 1: Poetry (Recommended)**
+   **Option 1: UV (Recommended)**
    ```bash
-   pip install poetry
-   poetry install
+   pip install uv
+   uv sync --dev
    ```
 
    **Option 2: pip**
@@ -82,19 +82,19 @@ Learning from educational YouTube videos and want to maximize retention and buil
 
 ## Usage
 
-### Using Poetry (Recommended)
+### Using UV (Recommended)
 ```bash
 # Manual subject (bypasses auto-categorization)
-yt-study-buddy --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
+uv run yt-study-buddy --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
 
 # Auto-categorization (ML model picks best subject folder)
-yt-study-buddy "https://youtube.com/watch?v=xyz"
+uv run yt-study-buddy "https://youtube.com/watch?v=xyz"
 
 # Batch with auto-categorization
-yt-study-buddy --batch
+uv run yt-study-buddy --batch
 
 # Subject-only cross-referencing (no global connections)
-yt-study-buddy --subject "AI Ethics" --subject-only --batch
+uv run yt-study-buddy --subject "AI Ethics" --subject-only --batch
 ```
 
 ### Using Python Directly
@@ -118,20 +118,20 @@ python main.py --batch
 ### Web Interface (Easy Setup)
 ```bash
 # Run the Streamlit web interface
-streamlit run streamlit_app.py
+uv run streamlit run streamlit_app.py
 ```
 Then open your browser to **http://localhost:8501** for a user-friendly interface with drag & drop URL input.
 
 ### Command Line Examples
 ```bash
-# Custom URL file (Poetry)
-yt-study-buddy --subject "Data Science" --batch --file my_videos.txt
+# Custom URL file (UV)
+uv run yt-study-buddy --subject "Data Science" --batch --file my_videos.txt
 
 # Custom URL file (Python)
 python main.py --subject "Data Science" --batch --file my_videos.txt
 
 # Help
-yt-study-buddy --help
+uv run yt-study-buddy --help
 ```
 
 ## URLs File Format
@@ -239,6 +239,6 @@ Assessments are **active learning checkpoints**
 
 ## Requirements
 
-- Python 3.13+ with Poetry
+- Python 3.13+ with UV
 - Claude API key (from console.anthropic.com)
 - Optional: Sentence transformer models (auto-downloads on first use)

@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from youtube_transcript_api import YouTubeTranscriptApi
-from src.video_processor import VideoProcessor
+from yt_study_buddy.video_processor import VideoProcessor
 
 def test_exact_failing_video():
     """Test the exact video that's failing"""

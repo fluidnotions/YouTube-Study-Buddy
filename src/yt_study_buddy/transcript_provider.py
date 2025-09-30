@@ -58,6 +58,9 @@ class AbstractTranscriptProvider(ABC):
 class APITranscriptProvider(AbstractTranscriptProvider):
     """Official YouTube Transcript API provider (original implementation)."""
 
+    def __init__(self):
+        self.api = YouTubeTranscriptApi()
+
     def get_transcript(self, video_id: str) -> Dict[str, Any]:
         """Get transcript using official YouTube Transcript API."""
         try:
@@ -66,13 +69,17 @@ class APITranscriptProvider(AbstractTranscriptProvider):
 
             # Try English first
             try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+                fetched = self.api.fetch(video_id, languages=['en'])
             except:
                 # Fall back to any available language
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+                fetched = self.api.fetch(video_id)
+
+            # FetchedTranscript is iterable and contains FetchedTranscriptSnippet objects
+            # Each snippet has: text, start, duration attributes
+            transcript_list = list(fetched)
 
             # Combine all transcript segments
-            transcript = ' '.join([item['text'] for item in transcript_list])
+            transcript = ' '.join([snippet.text for snippet in transcript_list])
 
             # Clean up the transcript
             transcript = re.sub(r'\s+', ' ', transcript)
@@ -81,7 +88,8 @@ class APITranscriptProvider(AbstractTranscriptProvider):
             # Calculate video duration
             duration_info = None
             if transcript_list:
-                duration_seconds = transcript_list[-1]['start'] + transcript_list[-1]['duration']
+                last_snippet = transcript_list[-1]
+                duration_seconds = last_snippet.start + last_snippet.duration
                 duration_minutes = int(duration_seconds / 60)
                 duration_info = f"~{duration_minutes} minutes"
 
@@ -126,17 +134,20 @@ class APITranscriptProvider(AbstractTranscriptProvider):
                 time.sleep(random.uniform(1, 3))
 
                 try:
-                    transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+                    fetched = self.api.fetch(video_id, languages=['en'])
                 except:
-                    transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+                    fetched = self.api.fetch(video_id)
 
-                transcript = ' '.join([item['text'] for item in transcript_list])
+                transcript_list = list(fetched)
+
+                transcript = ' '.join([snippet.text for snippet in transcript_list])
                 transcript = re.sub(r'\s+', ' ', transcript)
                 transcript = transcript.replace('[Music]', '').replace('[Applause]', '')
 
                 duration_info = None
                 if transcript_list:
-                    duration_seconds = transcript_list[-1]['start'] + transcript_list[-1]['duration']
+                    last_snippet = transcript_list[-1]
+                    duration_seconds = last_snippet.start + last_snippet.duration
                     duration_minutes = int(duration_seconds / 60)
                     duration_info = f"~{duration_minutes} minutes"
 

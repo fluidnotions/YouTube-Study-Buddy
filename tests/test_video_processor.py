@@ -108,9 +108,9 @@ class TestAPIProvider:
         """Test API provider rate limiting handling."""
         processor = VideoProcessor(provider_type="api")
 
-        with patch('youtube_transcript_api.YouTubeTranscriptApi.get_transcript') as mock_get:
+        with patch.object(processor.provider.api, 'fetch') as mock_fetch:
             # Simulate rate limiting error
-            mock_get.side_effect = Exception("429 Too Many Requests")
+            mock_fetch.side_effect = Exception("429 Too Many Requests")
 
             with pytest.raises(Exception) as exc_info:
                 processor.get_transcript(sample_video_id)

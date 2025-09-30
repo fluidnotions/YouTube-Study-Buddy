@@ -106,9 +106,9 @@ class TestAPITranscriptProvider:
         """Test rate limiting handling."""
         provider = APITranscriptProvider()
 
-        with patch('youtube_transcript_api.YouTubeTranscriptApi.get_transcript') as mock_get:
+        with patch.object(provider.api, 'fetch') as mock_fetch:
             # First call fails with rate limiting
-            mock_get.side_effect = Exception("429 Too Many Requests")
+            mock_fetch.side_effect = Exception("429 Too Many Requests")
 
             with pytest.raises(Exception):
                 provider.get_transcript(sample_video_id)
@@ -145,10 +145,10 @@ class TestAPITranscriptProvider:
         """Test exponential backoff retry logic."""
         provider = APITranscriptProvider()
 
-        with patch('youtube_transcript_api.YouTubeTranscriptApi.get_transcript') as mock_get:
+        with patch.object(provider.api, 'fetch') as mock_fetch:
             with patch('time.sleep') as mock_sleep:  # Speed up test
                 # All retries fail
-                mock_get.side_effect = Exception("Persistent error")
+                mock_fetch.side_effect = Exception("Persistent error")
 
                 with pytest.raises(Exception) as exc_info:
                     provider._retry_with_backoff(sample_video_id, max_retries=2)
@@ -305,7 +305,7 @@ class TestProviderComparison:
         assert hasattr(scraper_provider, 'get_video_title')
 
         # Both should return the same data structure
-        with patch('youtube_transcript_api.YouTubeTranscriptApi.get_transcript'):
+        with patch.object(api_provider.api, 'fetch'):
             with patch('requests.get'):
                 try:
                     api_result = api_provider.get_transcript(sample_video_id)

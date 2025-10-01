@@ -249,9 +249,13 @@ Options:
   --subject-only          Cross-reference only within the specified subject (default: global)
   --batch                 Process multiple URLs from file
   --file <filename>       Use custom URL file (default: urls.txt)
-  --method <api|scraper>  Transcript extraction method (default: api)
+  --method <api|scraper|tor>  Transcript extraction method (default: api)
                           - api: YouTube Transcript API (may hit rate limits)
                           - scraper: Web scraping (bypasses rate limits)
+                          - tor: Via Tor proxy (best for bypassing IP blocks)
+  --tor-host <host>       Tor SOCKS proxy host (default: 127.0.0.1)
+  --tor-port <port>       Tor SOCKS proxy port (default: 9050)
+  --no-tor-fallback       Disable fallback to direct connection if Tor fails
   --help                  Show this help message
 
 Examples:
@@ -259,10 +263,16 @@ Examples:
   python main.py --subject "Python" --batch
   python main.py --subject "AI" --subject-only --batch
   python main.py --method scraper --batch                # Use web scraping to avoid rate limits
+  python main.py --method tor --batch                    # Use Tor proxy to bypass IP blocks
+  python main.py --method tor --tor-port 9050 --batch    # Tor with custom port
 
 Requirements:
   Claude API key is required (set CLAUDE_API_KEY or ANTHROPIC_API_KEY)
   Get API key from: https://console.anthropic.com/
+
+  For Tor proxy method:
+  - Run Tor proxy: docker-compose up -d tor-proxy
+  - Or install Tor locally: apt-get install tor (Linux) / brew install tor (Mac)
 
 Output:
   Notes saved in Study notes/<subject>/ folders
@@ -322,8 +332,11 @@ Output:
         parser.add_argument('--delay', '-d', type=int, default=3, help='Delay between requests in seconds (default: 3)')
         parser.add_argument('--aggressive', action='store_true', help='Aggressive mode - shorter delays, more retries')
         parser.add_argument('--conservative', action='store_true', help='Conservative mode - longer delays, fewer retries')
-        parser.add_argument('--method', '-m', choices=['api', 'scraper'], default='api',
-                          help='Transcript extraction method: api (YouTube API) or scraper (web scraping)')
+        parser.add_argument('--method', '-m', choices=['api', 'scraper', 'tor'], default='api',
+                          help='Transcript extraction method: api (YouTube API), scraper (web scraping), or tor (via Tor proxy)')
+        parser.add_argument('--tor-host', default='127.0.0.1', help='Tor SOCKS proxy host (default: 127.0.0.1)')
+        parser.add_argument('--tor-port', type=int, default=9050, help='Tor SOCKS proxy port (default: 9050)')
+        parser.add_argument('--no-tor-fallback', action='store_true', help='Disable fallback to direct connection if Tor fails')
         parser.add_argument('--no-assessments', action='store_true', help='Disable assessment generation')
         parser.add_argument('--no-auto-categorize', action='store_true', help='Disable auto-categorization')
         parser.add_argument('--help', '-h', action='store_true', help='Show help message')
@@ -332,15 +345,27 @@ Output:
 
         if args.help:
             self.show_help()
-            return
+            sys.exit(0)
 
         # Update instance settings based on arguments
 
         # Update transcript provider if specified
         if args.method != self.provider_type:
             self.provider_type = args.method
-            self.video_processor = VideoProcessor(args.method)
+
+            # Build provider kwargs for Tor
+            provider_kwargs = {}
+            if args.method == 'tor':
+                provider_kwargs['tor_host'] = args.tor_host
+                provider_kwargs['tor_port'] = args.tor_port
+                provider_kwargs['use_tor_first'] = not args.no_tor_fallback
+
+            self.video_processor = VideoProcessor(args.method, **provider_kwargs)
             print(f"Using {args.method} transcript method")
+
+            if args.method == 'tor':
+                print(f"  Tor proxy: {args.tor_host}:{args.tor_port}")
+                print(f"  Fallback to direct: {'disabled' if args.no_tor_fallback else 'enabled'}")
 
         if args.subject:
             self.subject = args.subject

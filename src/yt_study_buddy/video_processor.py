@@ -10,14 +10,15 @@ from .transcript_provider import TranscriptProvider, create_transcript_provider
 class VideoProcessor:
     """Handles YouTube video processing using pluggable transcript providers."""
 
-    def __init__(self, provider_type: str = "api"):
+    def __init__(self, provider_type: str = "api", **provider_kwargs):
         """
         Initialize with a specific transcript provider.
 
         Args:
-            provider_type: "api" for YouTube Transcript API, "scraper" for web scraping
+            provider_type: "api" for YouTube Transcript API, "scraper" for web scraping, "tor" for Tor proxy
+            **provider_kwargs: Additional arguments passed to provider (e.g., tor_host, tor_port for 'tor')
         """
-        self.provider: TranscriptProvider = create_transcript_provider(provider_type)
+        self.provider: TranscriptProvider = create_transcript_provider(provider_type, **provider_kwargs)
         self.provider_type = provider_type
 
     def get_video_id(self, url: str) -> Optional[str]:
@@ -41,10 +42,13 @@ class VideoProcessor:
             print(f"  Using {self.provider_type} provider...")
             return self.provider.get_transcript(video_id)
         except Exception as e:
-            # If API provider fails, suggest trying scraper
+            # If API provider fails, suggest alternatives
             if self.provider_type == "api":
                 print(f"  API provider failed: {e}")
-                print("  Consider trying --method scraper for rate limit bypass")
+                print("  Consider trying --method tor (with Tor proxy) or --method scraper")
+            elif self.provider_type == "tor":
+                print(f"  Tor provider failed: {e}")
+                print("  Make sure Tor proxy is running (docker-compose up -d tor-proxy)")
             else:
                 print(f"  Scraper provider failed: {e}")
             raise

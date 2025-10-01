@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  tor-proxy:
+    image: dperson/torproxy:latest
+    container_name: ytstudybuddy-tor-proxy
+    restart: unless-stopped
+    ports:
+      - "8118:8118"  # HTTP proxy (Privoxy)
+      - "9050:9050"  # SOCKS5 proxy (Tor)
+    environment:
+      - TORUSER=torrr        # Optional: set username for HTTP proxy auth
+      - PASSWORD=secret      # Optional: set password for HTTP proxy auth
+      - LOCATION=US          # Optional: prefer US exit nodes
+    volumes:
+      - tor-data:/var/lib/tor
+    healthcheck:
+      test: ["CMD", "curl", "-x", "socks5://localhost:9050", "https://check.torproject.org", "-s", "-o", "/dev/null", "-w", "%{http_code}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  tor-data:
+    driver: local

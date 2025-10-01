@@ -1,16 +1,5 @@
+ @~/.claude/claude.md
 # CLAUDE.md - YTStudyBuddy Project Instructions
-
-## CRITICAL: Autonomous Operation
-
-**NEVER ASK FOR CONFIRMATION OR PERMISSION. EXECUTE ALL ACTIONS IMMEDIATELY.**
-
-- Do NOT ask to confirm commands, file edits, or any other actions
-- Do NOT ask which project folder to work in
-- Do NOT ask for approval to proceed
-- Do NOT ask if the user wants you to continue
-- Execute all tasks autonomously without seeking permission
-- Make decisions and proceed immediately
-- Only ask clarifying questions if the task itself is fundamentally ambiguous
 
 ## Primary Reference: Home Directory CLAUDE.md
 
@@ -27,7 +16,7 @@ This project is part of the larger PyCharm Projects directory and should follow 
 
 This is the **ytstudybuddy** project:
 - **Purpose**: YouTube study notes generator with AI integration
-- **Core Flow**: YouTube URL ’ transcript extraction ’ AI-powered study notes + assessments
+- **Core Flow**: YouTube URL ï¿½ transcript extraction ï¿½ AI-powered study notes + assessments
 - **Key Components**: Claude API integration, sentence transformers for ML, auto-categorization
 - **Output**: Markdown files with wiki-style links for Obsidian compatibility
 - **Testing**: Uses pytest with custom test discovery in `run_tests.py`

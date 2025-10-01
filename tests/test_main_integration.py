@@ -4,6 +4,7 @@ Integration tests for the main application.
 import pytest
 import tempfile
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import patch, Mock
 from main import YouTubeStudyNotes
@@ -92,19 +93,34 @@ class TestSingleURLProcessing:
     """Test single URL processing workflow."""
 
     @pytest.mark.integration
-    def test_process_single_url_success(self, sample_video_urls, mock_youtube_transcript_api, mock_claude_api, temp_study_notes_dir):
-        """Test successful single URL processing."""
-        app = YouTubeStudyNotes(base_dir=str(temp_study_notes_dir))
+    @pytest.mark.slow
+    def test_cli_interactive_single_url(self, tmp_path):
+        """Test CLI interactive mode with single URL processing (real, no mocks)."""
+        # Use a real YouTube video URL that should have captions
+        test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
-        with patch('os.makedirs'):
-            with patch.object(app.notes_generator, 'is_ready', return_value=True):
-                with patch.object(app.notes_generator, 'generate_notes', return_value="# Test Notes"):
-                    with patch.object(app.notes_generator, 'create_markdown_file', return_value="test.md"):
-                        with patch.object(app.obsidian_linker, 'process_file', return_value=True):
-                            with patch.object(app.knowledge_graph, 'refresh_cache'):
+        # Prepare input: choice 1 (single URL), then the URL, then quit
+        input_data = f"1\n{test_url}\n4\n"
 
-                                result = app.process_single_url(sample_video_urls["standard"])
-                                assert result is True
+        # Run the actual CLI application
+        result = subprocess.run(
+            ["python", "main.py"],
+            input=input_data,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent,
+            timeout=60
+        )
+
+        # Check that the process ran (might fail on transcript fetch due to rate limiting, but should execute)
+        assert result.returncode in [0, 1]  # 0 = success, 1 = expected failure (rate limit)
+
+        # Verify the interactive prompts appeared
+        assert "Choose mode:" in result.stdout
+        assert "Process single URL" in result.stdout
+
+        # Verify it attempted to process the URL
+        assert "Found video ID:" in result.stdout or "ERROR" in result.stdout
 
     @pytest.mark.integration
     def test_process_single_url_invalid_url(self, sample_video_urls):

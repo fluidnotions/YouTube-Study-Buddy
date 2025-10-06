@@ -4,3 +4,4 @@ docs/learning
 urls.txt
 __pycache__/
 .idea/
+/autofix.log

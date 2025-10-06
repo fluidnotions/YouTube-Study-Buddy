@@ -10,7 +10,6 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import requests
 import re
 import socket
-import stem
 from stem import Signal
 from stem.control import Controller
 

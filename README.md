@@ -1,244 +1,121 @@
-# YT Study Buddy
+# YT Study Buddy 📚
 
-Learning from educational YouTube videos and want to maximize retention and build meaningful connections? **YT Study Buddy** transforms any YouTube video into structured study notes with intelligent cross-referencing that builds your personal knowledge graph over time, turning scattered video content into an interconnected learning system.
+**Technology moves faster than traditional education.** YouTube has become the world's largest university, but watching videos is passive learning. **YT Study Buddy** transforms YouTube content into an active learning system using AI-powered note generation, learning assessments, and knowledge graph building.
 
-## 🧠 The Science: Active Learning vs Passive Watching
+## 🧠 Why This Matters
 
-**Traditional passive note-taking** often leads to the "illusion of competence" – where learners feel they understand content simply because they've transcribed it. YT Study Buddy implements research-backed learning principles:
+Traditional note-taking creates the "illusion of competence" – you transcribe content but don't truly learn. YT Study Buddy applies cognitive science:
+- **Active recall** through assessment questions
+- **Spaced repetition** by separating note review from watching
+- **Interconnected learning** with cross-referenced knowledge graphs
 
-- **Dual Coding Theory** – Combines text with visual spatial organization for stronger memory formation
-- **Generation Effect** – Assessment questions force active answer generation, improving retention
-- **Desirable Difficulties** – "One-up" challenges introduce productive struggle beyond the presented material
-- **Elaborative Interrogation** – Gap analysis questions reveal what your brain filtered out
-- **Spaced Retrieval Practice** – Separation of note generation from video watching enables spaced review
+**Result:** Turn passive watching into deep understanding with structured notes, learning questions, and automatic connections to everything you've studied.
 
-**Result:** Instead of passive consumption, you get an active learning system with notes AND assessment questions that test understanding beyond surface-level recall.
+## 💰 The Value
 
-## 💰 Free vs Paid Alternatives
+**Paid alternatives** ($10-50/month): NoteGPT, Notta, Eightify – subscription requiredI think you might have forgotten that I changed the name from YT to YouTube, so it should be replaced everywhere, which I can do quite easily, but also in the package name. Thank you.
+**YT Study Buddy**: 100% free, runs locally, unlimited use, your data stays private
 
-**Paid ($10-50+/month):** NoteGPT, Notta, Eightify, Maestra – all require subscriptions for full features
+## ✨ What You Get
 
-**Free (Limited):** Basic transcripts, no AI analysis, no cross-referencing, no assessments
+- 🤖 **AI Study Notes** – Claude AI transforms transcripts into structured notes with key concepts, examples, and connections
+- 📝 **Learning Assessments** – Auto-generated questions that test deep understanding, not just recall
+- 🔗 **Knowledge Graph** – Automatic cross-referencing finds connections across all your notes
+- 🗺️ **Obsidian Integration** – Notes include `[[wiki-style]]` links that create an interconnected knowledge base
+- 🏷️ **Auto-Organization** – ML-powered categorization sorts notes by subject automatically
+- 📋 **Playlist Support** – Process entire YouTube playlists with one click
 
-**YT Study Buddy:** Completely free with AI-powered notes, learning assessments, auto-categorization, and knowledge graph building. No subscriptions, no limits.
-
-## Key Features
-- **AI-Powered Study Notes** – Transforms raw transcripts into structured learning materials with defined sections
-- **Learning Assessments** – Generates 4 question types including unique "One-Up Challenges" that ask you to improve upon what you learned
-- **Smart Auto-Categorization** – When no subject specified, ML model detects best-fit from existing folders or creates new ones
-- **Intelligent Cross-Referencing** – Same ML model finds semantically related concepts across your entire note collection
-- **Obsidian Integration** – Creates `[[wiki-style]]` links for seamless knowledge graph building
-- **Subject Override** – Use `--subject` flag to bypass auto-categorization when you know where content belongs
-- **Batch Processing** – Process multiple videos efficiently with URL file support
-- **Knowledge Graph Growth** – Each new video strengthens connections in your existing knowledge base
-
-## Technical Stack
-
-- **Python 3.13+** with UV package management
-- **Claude AI API** – Generates notes and assessment questions (remote)
-- **Sentence Transformers** – One local ML model powers both auto-categorization AND semantic cross-referencing
-- **Graceful Fallbacks** – Works without ML models (manual subject + keyword matching)
-- **Obsidian-compatible** Markdown with wiki-style linking
-
-## Setup
-
-1. **Install Dependencies**
-
-   **Option 1: UV (Recommended)**
-   ```bash
-   pip install uv
-   uv sync --dev
-   ```
-
-   **Option 2: pip**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Get Claude API Key**
-   - Visit [https://console.anthropic.com/](https://console.anthropic.com/)
-   - Create an account and generate an API key
-
-3. **Configure API Key & Models**
-
-   Create a `.env` file in this directory:
-   ```
-   CLAUDE_API_KEY=your_api_key_here
-
-   # ML Model Configuration (optional - defaults shown)
-   SENTENCE_TRANSFORMER_MODEL=all-MiniLM-L6-v2
-   ```
-
-   Or set environment variables:
-   ```bash
-   export CLAUDE_API_KEY=your_api_key_here
-   export SENTENCE_TRANSFORMER_MODEL=all-MiniLM-L6-v2
-   ```
-
-   **Model Options:**
-   - `all-MiniLM-L6-v2` - Fast, good quality (default)
-   - `all-mpnet-base-v2` - Higher quality, slower
-   - `all-distilroberta-v1` - Alternative architecture
-
-## Usage
-
-### Using UV (Recommended)
-```bash
-# Manual subject (bypasses auto-categorization)
-uv run yt-study-buddy --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
-
-# Auto-categorization (ML model picks best subject folder)
-uv run yt-study-buddy "https://youtube.com/watch?v=xyz"
-
-# Batch with auto-categorization
-uv run yt-study-buddy --batch
-
-# Subject-only cross-referencing (no global connections)
-uv run yt-study-buddy --subject "AI Ethics" --subject-only --batch
-```
-
-### Using Python Directly
-```bash
-# Single video (saved to base Study notes/ folder)
-python main.py "https://www.youtube.com/watch?v=VIDEO_ID"
-
-# Batch processing
-python main.py --batch
-```
-
-### Command Line Flags
-
-| Flag | Description |
-|------|-------------|
-| `--subject <name>` | Organize notes by subject (creates `Study notes/<subject>/` folder) |
-| `--subject-only` | **Used with --subject**: Cross-reference only within that subject (default: global) |
-| `--batch` | Process multiple URLs from file |
-| `--file <filename>` | Use custom URL file (default: urls.txt) |
-
-### Web Interface (Easy Setup)
-```bash
-# Run the Streamlit web interface
-uv run streamlit run streamlit_app.py
-```
-Then open your browser to **http://localhost:8501** for a user-friendly interface with drag & drop URL input.
-
-### Command Line Examples
-```bash
-# Custom URL file (UV)
-uv run yt-study-buddy --subject "Data Science" --batch --file my_videos.txt
-
-# Custom URL file (Python)
-python main.py --subject "Data Science" --batch --file my_videos.txt
-
-# Help
-uv run yt-study-buddy --help
-```
-
-## URLs File Format
-
-Create a `urls.txt` file with one YouTube URL per line:
-```
-https://www.youtube.com/watch?v=abc123
-https://youtu.be/def456
-# Comments start with # and are ignored
-
-https://www.youtube.com/watch?v=ghi789
-```
-
-### Extracting URLs from Playlists
-
-Instead of manually copying URLs, you can extract them from playlists using `yt-dlp`:
+## 🚀 Quick Start
 
 ```bash
-# Install yt-dlp
-pip install yt-dlp
+# 1. Get a free Claude API key from https://console.anthropic.com/
 
-# Extract all video URLs from a playlist and save to urls.txt
-yt-dlp --get-url --flat-playlist "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" > urls.txt
+# 2. Create .env file with your API key
+echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Or get URLs with titles for reference
-yt-dlp --get-title --get-url --flat-playlist "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+# 3. Run with Docker Compose
+docker-compose up
 ```
 
-This eliminates the tedious manual process of copying URLs from your playlists!
+> **Note**: Docker image pulls from `fluidnotions/youtube-study-buddy:latest`
 
-### Generated Output Examples
+**That's it!** Your browser opens automatically to the web interface.
 
-**Notes File:** `Transformers_Explained.md`
+### CLI Usage (For Automation)
+
+```bash
+# Install package
+uv sync
+
+# Process URLs directly
+uv run youtube-study-buddy "https://youtube.com/watch?v=xyz"
+
+# Process from file
+uv run youtube-study-buddy --file playlist-urls.txt
+
+# With subject organization
+uv run youtube-study-buddy --subject "Machine Learning" url1 url2
+
+# Full help
+uv run youtube-study-buddy --help
+```
+
+## 🗺️ Using With Obsidian
+
+[Obsidian](https://obsidian.md) is a free knowledge base app that lets you build a "second brain." YT Study Buddy generates notes with:
+- **Wiki-style links** (`[[Related Topic]]`) that connect concepts across videos
+- **Graph view** showing how your knowledge interconnects
+- **Bidirectional linking** – see what relates to each note
+- **Local storage** – all your notes stay on your machine
+
+**Setup:**
+1. Download [Obsidian](https://obsidian.md) (free)
+2. Open your configured output folder as a vault in Obsidian
+3. Enable "Graph View" to see your knowledge connections
+4. As you process videos, watch your knowledge graph grow automatically
+
+## 📄 What Gets Created
+
+Every video generates two files in your configured output folder:
+
+**1. Study Notes** (`Video_Title.md`)
+- Structured summaries with key concepts
+- `[[Wiki-style links]]` connecting to related topics
+- Opens in Obsidian with full graph view
+
+**2. Learning Assessment** (`Video_Title_Assessment.md`)
+- Gap analysis questions (what did your brain filter out?)
+- Application questions (how would you use this?)
+- One-up challenges (how could you improve it?)
+- Synthesis questions (how does this connect to other topics?)
+
+**Example Output:**
+
 ```markdown
-# Attention Is All You Need - Transformers Explained
-[YouTube Video](https://www.youtube.com/watch?v=kCc8FmEb1nY)
-
 ## Core Concepts
-- **Self-attention mechanism** replaces recurrent layers entirely
-- **Multi-head attention** allows attending to different representation subspaces
-- **Positional encoding** provides sequence order information
+- Self-attention mechanism replaces recurrent layers
+- Multi-head attention enables parallel processing
 
 ## Connections & Relationships
-This connects to your [[Neural Machine Translation]] and [[BERT Architecture]] notes...
+This connects to [[Neural Machine Translation]] and [[BERT Architecture]]...
 ```
 
-**Assessment File:** `Transformers_Explained_Assessment.md`
-```markdown
-# Learning Assessment
+Your notes automatically link together, building a knowledge graph you can visualize in Obsidian.
 
-## Gap Analysis
-Q: What complexity details were mentioned but not captured in notes?
-Your Answer: [Write here]
+---
 
-## Application
-Q: How would you implement this for real-time inference on mobile?
-Your Answer: [Write here]
+## 🛠️ Alternative Ways to Run
 
-## One-Up Challenge
-Q: The video shows O(n²) complexity. How would you optimize for 100k+ tokens?
-Your Answer: [Write here]
+Don't want to use Docker? See **[Alternative Setup Methods](docs/technical/alternative-setup.md)** for:
+- Running from source with Python/UV
+- CLI usage and command-line flags
+- Development setup for contributors
+- Manual installation instructions
 
-## Synthesis
-Q: How does this relate to graph neural networks?
-Your Answer: [Write here]
+---
 
-[Model answers at bottom of file for self-checking]
-```
+## 📜 License & Contributing
 
-## Workflow
+MIT License - Free to use, modify, and distribute.
 
-1. **Curate** – Add videos to YouTube playlists, extract URLs with `yt-dlp` → `urls.txt`
-2. **Generate** – Batch process all videos → notes + assessments in organized folders
-3. **Canvas** – Import into Miro/Concepts for spatial learning with stylus
-4. **Learn Actively** – Review notes, attempt assessments, make visual connections
-
-## Assessment System
-
-### Four Types of Questions Generated:
-
-1. **Gap Analysis** – "What important details were in the video but NOT in your notes?" (reveals blind spots)
-2. **Application** – "How would you implement this in a real project?" (tests practical understanding)
-3. **One-Up Challenges** – "How could you improve/optimize what was shown?" (promotes innovation thinking)
-4. **Synthesis** – "How does this connect to other concepts?" (builds knowledge connections)
-
-### What Makes One-Up Challenges Special:
-
-Instead of asking "What did you learn?", we ask **"How would you make it better?"** Examples:
-- Video shows basic algorithm → "How would you optimize this for distributed systems?"
-- Tutorial uses standard approach → "How would you enhance this with modern ML techniques?"
-- Explains current limitation → "Design a solution that overcomes this constraint"
-
-This transforms learners from **knowledge consumers into knowledge creators**.
-
-### Where Files Are Saved
-
-```
-Study notes/
-├── Machine Learning/
-│   ├── Video_Title.md           # Notes
-│   └── Video_Title_Assessment.md # Questions
-```
-
-Assessments are **active learning checkpoints**
-
-## Requirements
-
-- Python 3.13+ with UV
-- Claude API key (from console.anthropic.com)
-- Optional: Sentence transformer models (auto-downloads on first use)
+Contributions welcome! See [PLAN.md](PLAN.md) for product roadmap and future features.

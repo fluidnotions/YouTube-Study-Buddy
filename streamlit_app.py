@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import time
+import subprocess
 from pathlib import Path
 
 # Add src directory to path
@@ -16,7 +17,7 @@ current_dir = Path(__file__).parent
 src_dir = current_dir / "src"
 sys.path.insert(0, str(src_dir))
 
-from main import YouTubeStudyNotes
+from src.yt_study_buddy.cli import YouTubeStudyNotes
 from yt_study_buddy.knowledge_graph import KnowledgeGraph
 
 
@@ -26,15 +27,77 @@ def initialize_session_state():
         st.session_state.processed_videos = []
     if 'current_processor' not in st.session_state:
         st.session_state.current_processor = None
+    if 'extracted_urls' not in st.session_state:
+        st.session_state.extracted_urls = ""
+    if 'processing' not in st.session_state:
+        st.session_state.processing = False
+    if 'show_quick_start' not in st.session_state:
+        st.session_state.show_quick_start = True
 
 
-def create_processor(subject, global_context, provider_type):
+def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="Study notes"):
     """Create or update the YouTube processor based on settings."""
     return YouTubeStudyNotes(
         subject=subject if subject else None,
         global_context=global_context,
-        provider_type=provider_type
+        base_dir=base_dir,
+        generate_assessments=generate_assessments,
+        auto_categorize=auto_categorize
     )
+
+
+def extract_playlist_urls(playlist_url):
+    """
+    Extract video URLs from a YouTube playlist using yt-dlp.
+
+    Args:
+        playlist_url: YouTube playlist URL
+
+    Returns:
+        List of video URLs or None if error
+    """
+    try:
+        # Check if yt-dlp is available
+        result = subprocess.run(
+            ['yt-dlp', '--version'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return None, "yt-dlp is not installed. Install with: pip install yt-dlp"
+
+        # Extract URLs from playlist
+        result = subprocess.run(
+            [
+                'yt-dlp',
+                '--flat-playlist',
+                '--print', 'url',
+                playlist_url
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            return None, f"Failed to extract playlist: {result.stderr}"
+
+        # Parse URLs
+        urls = [url.strip() for url in result.stdout.strip().split('\n') if url.strip()]
+
+        if not urls:
+            return None, "No URLs found in playlist"
+
+        return urls, None
+
+    except subprocess.TimeoutExpired:
+        return None, "Timeout while extracting playlist (> 60s)"
+    except FileNotFoundError:
+        return None, "yt-dlp is not installed. Install with: pip install yt-dlp"
+    except Exception as e:
+        return None, f"Error: {str(e)}"
 
 
 def display_knowledge_graph_stats(processor):
@@ -58,9 +121,53 @@ def display_knowledge_graph_stats(processor):
             st.error(f"Could not load stats: {e}")
 
 
-def process_single_video(url, processor):
+def validate_urls(url_text):
+    """
+    Validate URLs and return list of valid URLs with error message if any invalid.
+
+    Returns:
+        tuple: (list of valid URLs, error message or None)
+    """
+    if not url_text or not url_text.strip():
+        return None, "⚠️ No URLs provided. Please enter at least one YouTube URL."
+
+    lines = [line.strip() for line in url_text.strip().split('\n') if line.strip()]
+
+    if not lines:
+        return None, "⚠️ No valid URLs found. Please enter YouTube URLs (one per line)."
+
+    valid_urls = []
+    invalid_lines = []
+
+    for i, line in enumerate(lines, 1):
+        # Skip comments
+        if line.startswith('#'):
+            continue
+
+        # Basic YouTube URL validation
+        if 'youtube.com' in line or 'youtu.be' in line:
+            valid_urls.append(line)
+        else:
+            invalid_lines.append(f"Line {i}: {line[:50]}...")
+
+    if invalid_lines and not valid_urls:
+        error = "❌ No valid YouTube URLs found.\n\nInvalid lines:\n" + "\n".join(invalid_lines[:5])
+        if len(invalid_lines) > 5:
+            error += f"\n... and {len(invalid_lines) - 5} more"
+        return None, error
+
+    if invalid_lines:
+        warning = f"⚠️ Found {len(invalid_lines)} invalid line(s) - will skip these:\n" + "\n".join(invalid_lines[:3])
+        if len(invalid_lines) > 3:
+            warning += f"\n... and {len(invalid_lines) - 3} more"
+        return valid_urls, warning
+
+    return valid_urls, None
+
+
+def process_single_video(url, processor, progress_container):
     """Process a single YouTube video with progress tracking."""
-    with st.container():
+    with progress_container:
         progress_bar = st.progress(0)
         status_text = st.empty()
 
@@ -152,9 +259,9 @@ def main():
     st.title("📚 YouTube Study Buddy")
     st.markdown("Transform YouTube videos into organized study notes with AI-powered cross-referencing")
 
-    # Sidebar configuration
+    # Sidebar - Status and Settings
     with st.sidebar:
-        st.header("⚙️ Configuration")
+        st.header("🔑 System Status")
 
         # API key check
         api_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
@@ -162,132 +269,233 @@ def main():
             st.success("✅ Claude API key found")
         else:
             st.error("❌ Claude API key not found")
-            st.info("Set CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable")
-
-        # Subject configuration
-        subject = st.text_input(
-            "📂 Subject (optional)",
-            help="Organize notes by subject. Creates a folder structure."
-        )
-
-        # Cross-reference scope
-        global_context = st.checkbox(
-            "🌐 Global cross-referencing",
-            value=True,
-            help="Find connections across all subjects vs. subject-only"
-        )
-
-        # Provider selection
-        provider_type = st.selectbox(
-            "🔧 Transcript Method",
-            ["api", "scraper"],
-            help="API: YouTube Transcript API (may hit rate limits)\nScraper: Web scraping (bypasses limits)"
-        )
+            st.info("Set `CLAUDE_API_KEY` or `ANTHROPIC_API_KEY` environment variable")
 
         st.divider()
 
-    # Create processor
-    processor = create_processor(subject, global_context, provider_type)
-    display_knowledge_graph_stats(processor)
+        # Output path configuration
+        st.header("📁 Output Settings")
 
-    # Main content tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Single Video", "📦 Batch Processing", "📊 Results", "❓ Help"])
+        # Initialize default output path in session state
+        if 'output_base_dir' not in st.session_state:
+            st.session_state.output_base_dir = "Study notes"
 
-    with tab1:
-        st.header("Process Single YouTube Video")
-
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            url = st.text_input(
-                "YouTube URL",
-                placeholder="https://www.youtube.com/watch?v=...",
-                help="Paste a YouTube video URL"
-            )
-        with col2:
-            process_button = st.button("🚀 Process Video", type="primary")
-
-        if process_button and url:
-            if not api_key:
-                st.error("❌ Please set your Claude API key first")
-            else:
-                result = process_single_video(url, processor)
-                if result:
-                    st.success(f"✅ Successfully processed: **{result['title']}**")
-                    with st.expander("📋 Details"):
-                        st.write(f"**File:** {result['filename']}")
-                        st.write(f"**Related Notes:** {result['related_notes']}")
-                        st.write(f"**Transcript Length:** {result['transcript_length']} characters")
-
-    with tab2:
-        st.header("Batch Process Multiple Videos")
-
-        # File upload method
-        st.subheader("📁 Upload URLs File")
-        uploaded_file = st.file_uploader(
-            "Choose a text file with YouTube URLs (one per line)",
-            type=['txt']
+        output_path = st.text_input(
+            "Output Folder Path",
+            value=st.session_state.output_base_dir,
+            help="Path where study notes will be saved. Can be absolute or relative.",
+            disabled=st.session_state.processing
         )
 
-        if uploaded_file is not None:
-            urls = uploaded_file.getvalue().decode('utf-8').strip().split('\n')
-            urls = [url.strip() for url in urls if url.strip() and not url.startswith('#')]
+        # Update session state
+        if output_path != st.session_state.output_base_dir:
+            st.session_state.output_base_dir = output_path
 
-            st.info(f"Found {len(urls)} URLs to process")
+        # Show resolved path
+        resolved_path = os.path.abspath(output_path)
+        st.caption(f"📂 Saves to: `{resolved_path}`")
 
-            if st.button("🚀 Process All URLs", type="primary"):
+        st.divider()
+
+    # Main content tabs
+    tab1, tab2, tab3 = st.tabs(["🎬 Process Videos", "📊 Results", "❓ Help"])
+
+    with tab1:
+        # Quick start hint
+        if st.session_state.show_quick_start:
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.info("💡 **First time?** Use recommended settings below, or customize as needed.")
+            with col2:
+                if st.button("✕", help="Dismiss"):
+                    st.session_state.show_quick_start = False
+                    st.rerun()
+
+        # Processing Settings Section
+        st.subheader("⚙️ Processing Settings")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            subject = st.text_input(
+                "📂 Subject",
+                placeholder="e.g., Machine Learning, Python, History (optional)",
+                help="Organize notes by subject. Leave blank to auto-categorize.",
+                disabled=st.session_state.processing
+            )
+
+            global_context = st.checkbox(
+                "🌐 Global cross-referencing",
+                value=True,
+                help="Find connections across all subjects vs. subject-only",
+                disabled=st.session_state.processing
+            )
+
+        with col2:
+            # Transcript provider is now Tor-only (no selector needed)
+            col2a, col2b = st.columns(2)
+            with col2a:
+                generate_assessments = st.checkbox(
+                    "📝 Assessments",
+                    value=True,
+                    help="Generate learning questions",
+                    disabled=st.session_state.processing
+                )
+            with col2b:
+                auto_categorize = st.checkbox(
+                    "🏷️ Auto-categorize",
+                    value=True,
+                    help="Auto-detect subject (when blank)",
+                    disabled=st.session_state.processing
+                )
+
+        st.divider()
+
+        # Playlist Extraction Section
+        st.subheader("📋 Extract from YouTube Playlist (Optional)")
+        st.caption("ℹ️ Note: Playlist must be public or unlisted to extract URLs")
+
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            playlist_url = st.text_input(
+                "Playlist URL",
+                placeholder="https://www.youtube.com/playlist?list=...",
+                help="Enter a YouTube playlist URL to extract all video URLs. Playlist must be public or unlisted.",
+                disabled=st.session_state.processing,
+                label_visibility="collapsed"
+            )
+        with col2:
+            extract_button = st.button(
+                "🔍 Extract URLs",
+                type="secondary",
+                disabled=st.session_state.processing or not playlist_url
+            )
+
+        if extract_button and playlist_url:
+            with st.spinner("Extracting playlist URLs..."):
+                urls, error = extract_playlist_urls(playlist_url)
+
+                if error:
+                    st.error(error)
+                else:
+                    st.session_state.extracted_urls = '\n'.join(urls)
+                    st.success(f"✅ Extracted {len(urls)} videos from playlist")
+                    st.rerun()
+
+        # Show extraction status
+        if st.session_state.extracted_urls:
+            url_count = len([u for u in st.session_state.extracted_urls.split('\n') if u.strip()])
+            st.info(f"📊 {url_count} URL{'s' if url_count != 1 else ''} ready to process")
+
+        st.divider()
+
+        # URL Text Area
+        st.subheader("📝 Video URLs (one per line)")
+
+        url_text = st.text_area(
+            "URLs",
+            value=st.session_state.extracted_urls,
+            placeholder="https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/watch?v=...\n\n# You can add comments with #\nhttps://youtu.be/...",
+            height=200,
+            help="Enter YouTube URLs, one per line. Use # for comments.",
+            disabled=st.session_state.processing,
+            label_visibility="collapsed"
+        )
+
+        # Update session state
+        if not st.session_state.processing:
+            st.session_state.extracted_urls = url_text
+
+        # Action buttons
+        col1, col2, col3 = st.columns([2, 2, 1])
+
+        with col1:
+            process_button = st.button(
+                "🚀 Process Videos",
+                type="primary",
+                disabled=st.session_state.processing or not url_text.strip(),
+                use_container_width=True
+            )
+
+        with col2:
+            if st.session_state.processing:
+                st.button("⏸️ Processing...", disabled=True, use_container_width=True)
+
+        with col3:
+            if st.button("🗑️ Clear", disabled=st.session_state.processing, use_container_width=True):
+                st.session_state.extracted_urls = ""
+                st.rerun()
+
+        # Process videos
+        if process_button:
+            # Validate URLs
+            valid_urls, error_or_warning = validate_urls(url_text)
+
+            if valid_urls is None:
+                st.error(error_or_warning)
+            else:
+                # Show warning if any invalid URLs
+                if error_or_warning:
+                    st.warning(error_or_warning)
+
+                # Check API key
                 if not api_key:
                     st.error("❌ Please set your Claude API key first")
                 else:
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+                    # Set processing flag
+                    st.session_state.processing = True
+
+                    # Create processor with configured output path
+                    processor = create_processor(
+                        subject if subject else None,
+                        global_context,
+                        generate_assessments,
+                        auto_categorize and not subject,
+                        base_dir=st.session_state.output_base_dir
+                    )
+
+                    # Switch to Results tab by rerunning with active tab
+                    st.session_state.active_tab = "results"
+
+                    # Process videos
+                    progress_container = st.container()
+                    status_container = st.container()
+
+                    with status_container:
+                        st.info(f"🎬 Processing {len(valid_urls)} video{'s' if len(valid_urls) != 1 else ''}...")
+
+                    overall_progress = st.progress(0)
+                    overall_status = st.empty()
 
                     successful = 0
-                    for i, url in enumerate(urls):
-                        status_text.text(f"Processing {i+1}/{len(urls)}: {url}")
+                    for i, url in enumerate(valid_urls):
+                        overall_status.text(f"Processing {i+1}/{len(valid_urls)}: {url[:60]}...")
 
                         if i > 0:  # Add delay between requests
                             time.sleep(3)
 
-                        result = process_single_video(url, processor)
+                        result = process_single_video(url, processor, progress_container)
                         if result:
                             successful += 1
 
-                        progress_bar.progress((i + 1) / len(urls))
+                        overall_progress.progress((i + 1) / len(valid_urls))
 
-                    st.success(f"✅ Batch complete: {successful}/{len(urls)} videos processed")
+                    # Reset processing flag
+                    st.session_state.processing = False
 
-        # Direct text input method
-        st.subheader("📝 Direct Input")
-        url_text = st.text_area(
-            "Enter YouTube URLs (one per line)",
-            placeholder="https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/watch?v=...",
-            height=100
-        )
+                    # Show completion message
+                    if successful == len(valid_urls):
+                        st.success(f"✅ Successfully processed all {successful} video{'s' if successful != 1 else ''}!")
+                    elif successful > 0:
+                        st.warning(f"⚠️ Processed {successful}/{len(valid_urls)} videos. Some failed.")
+                    else:
+                        st.error(f"❌ Failed to process any videos.")
 
-        if url_text and st.button("🚀 Process URLs", type="primary"):
-            urls = [url.strip() for url in url_text.strip().split('\n') if url.strip()]
-            if not api_key:
-                st.error("❌ Please set your Claude API key first")
-            else:
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+                    # Display knowledge graph stats in sidebar
+                    with st.sidebar:
+                        display_knowledge_graph_stats(processor)
 
-                successful = 0
-                for i, url in enumerate(urls):
-                    status_text.text(f"Processing {i+1}/{len(urls)}: {url}")
-
-                    if i > 0:
-                        time.sleep(3)
-
-                    result = process_single_video(url, processor)
-                    if result:
-                        successful += 1
-
-                    progress_bar.progress((i + 1) / len(urls))
-
-                st.success(f"✅ Batch complete: {successful}/{len(urls)} videos processed")
-
-    with tab3:
+    with tab2:
         st.header("📊 Processing Results")
 
         if st.session_state.processed_videos:
@@ -309,7 +517,17 @@ def main():
             st.session_state.processed_videos = []
             st.rerun()
 
-    with tab4:
+    # Add Knowledge Graph stats to sidebar
+    with st.sidebar:
+        if st.session_state.processed_videos:
+            # Create a dummy processor to show stats
+            processor = create_processor(
+                None, True, True, True,
+                base_dir=st.session_state.output_base_dir
+            )
+            display_knowledge_graph_stats(processor)
+
+    with tab3:
         st.header("❓ Help & Information")
 
         st.markdown("""
@@ -319,14 +537,22 @@ def main():
            - `CLAUDE_API_KEY` or `ANTHROPIC_API_KEY`
            - Get it from [console.anthropic.com](https://console.anthropic.com/)
 
-        2. **Configure your settings** in the sidebar:
-           - Choose a subject to organize your notes
-           - Select global or subject-only cross-referencing
-           - Pick transcript extraction method
+        2. **Configure processing settings** in the "Process Videos" tab:
+           - **Subject**: Organize notes by topic (optional - leave blank for auto-categorization)
+           - **Global cross-referencing**: Find connections across all subjects
+           - **Transcript method**: Choose API, Scraper, or Tor
+           - **Assessments**: Generate learning questions alongside notes
+           - **Auto-categorize**: Automatically detect and organize by subject
 
-        3. **Process videos**:
-           - Single videos: Paste URL and click Process
-           - Batch: Upload text file or paste multiple URLs
+        3. **Add video URLs**:
+           - **Option A - Extract from playlist**: Enter playlist URL → Click "Extract URLs"
+           - **Option B - Manual entry**: Paste URLs directly into the text area (one per line)
+           - **Tip**: You can mix both methods - extract playlist then edit the list
+
+        4. **Process and view results**:
+           - Click "🚀 Process Videos" to start
+           - View progress and results in the "Results" tab
+           - Files are saved to `Study notes/[Subject]/` folders
 
         ### 📁 Output Structure
 
@@ -342,24 +568,32 @@ def main():
 
         ### 🔗 Features
 
-        - **AI-powered summarization** using Claude
+        - **AI-powered summarization** using Claude Sonnet 4.5
+        - **Learning assessments** with gap analysis and application questions
+        - **Auto-categorization** using ML-based subject detection
+        - **Playlist extraction** using yt-dlp for batch processing
         - **Cross-referencing** between related notes
         - **Obsidian integration** with automatic [[links]]
         - **Knowledge graph** for concept tracking
-        - **Batch processing** for multiple videos
-        - **Rate limiting protection** with delays
-
-        ### 🛠️ Transcript Methods
-
-        - **API**: YouTube Transcript API (faster, may hit rate limits)
-        - **Scraper**: Web scraping (slower, bypasses rate limits)
+        - **Tor-based fetching** for reliable transcript access
 
         ### 💡 Tips
 
-        - Use subjects to organize notes by topic
-        - Global cross-referencing finds connections across all subjects
-        - Subject-only cross-referencing keeps connections within the same subject
+        - **Playlist processing**: Use the playlist extractor to quickly get all URLs from a YouTube playlist
+        - **Auto-categorization**: Leave subject blank and enable auto-categorize to let AI organize your notes
+        - **Assessments**: Enable assessments to get learning questions that test deeper understanding
+        - **Cross-referencing**: Global finds connections across all subjects, subject-only stays focused
+        - **Tor method**: For best results with rate limiting, use Tor with the tor-proxy container
         - The tool automatically adds delays between batch requests to avoid rate limiting
+
+        ### 📦 Dependencies for Playlist Extraction
+
+        Install yt-dlp to enable playlist URL extraction:
+        ```bash
+        pip install yt-dlp
+        # or
+        uv pip install yt-dlp
+        ```
         """)
 
 

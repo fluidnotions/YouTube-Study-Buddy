@@ -1,4 +1,4 @@
-"""YT Study Buddy package exports."""
+"""YouTube Study Buddy package exports."""
 
 from .video_processor import VideoProcessor
 from .knowledge_graph import KnowledgeGraph

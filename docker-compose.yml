@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  youtube-study-buddy:
+    image: fluidnotions/youtube-study-buddy:latest
+    container_name: youtube-study-buddy
+    ports:
+      - "8501:8501"
+    environment:
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+    volumes:
+      - ./Study notes:/app/Study notes
+    depends_on:
+      - tor-proxy
+    restart: unless-stopped
+
   tor-proxy:
     image: dperson/torproxy:latest
     container_name: ytstudybuddy-tor-proxy

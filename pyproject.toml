@@ -1,5 +1,5 @@
 [project]
-name = "yt-study-buddy"
+name = "youtube-study-buddy"
 version = "0.1.0"
 description = "YouTube transcript to study notes converter with AI integration"
 authors = [
@@ -25,6 +25,7 @@ dependencies = [
     "pytest>=8.4.2",
     "PySocks>=1.7.1",
     "stem>=1.8.0",
+    "yt-dlp>=2025.9.26",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ dev = [
 ]
 
 [project.scripts]
-yt-study-buddy = "yt_study_buddy.cli:main"
+youtube-study-buddy = "yt_study_buddy.cli:main"
 
 [build-system]
 requires = ["hatchling"]

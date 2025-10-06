@@ -1,5 +1,5 @@
  @~/.claude/claude.md
-# CLAUDE.md - YTStudyBuddy Project Instructions
+# CLAUDE.md - YouTubeStudyBuddy Project Instructions
 
 ## Primary Reference: Home Directory CLAUDE.md
 

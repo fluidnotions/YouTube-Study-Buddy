@@ -1,4 +1,4 @@
-# TODO List for YT Study Buddy
+# TODO List for YouTube Study Buddy
 
 ## High Priority
 

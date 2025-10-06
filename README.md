@@ -13,8 +13,10 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 
 ## 💰 The Value
 
-**Paid alternatives** ($10-50/month): NoteGPT, Notta, Eightify – subscription requiredI think you might have forgotten that I changed the name from YouTube to YouTube, so it should be replaced everywhere, which I can do quite easily, but also in the package name. Thank you.
+**Paid alternatives** ($10-50/month): NoteGPT, Notta, Eightify – subscription required
 **YouTube Study Buddy**: 100% free, runs locally, unlimited use, your data stays private
+
+⭐ **If you find this useful, please give it a star on GitHub!** It helps others discover the project.
 
 ## ✨ What You Get
 
@@ -118,4 +120,4 @@ Don't want to use Docker? See **[Alternative Setup Methods](docs/technical/alter
 
 MIT License - Free to use, modify, and distribute.
 
-Contributions welcome! See [PLAN.md](PLAN.md) for product roadmap and future features.
+Contributions welcome! Open an issue or pull request on GitHub.

@@ -54,62 +54,132 @@ class AssessmentGenerator:
                           video_title: str) -> Dict:
         """Generate different types of questions using Claude."""
 
-        prompt = f"""
-        Based on this YouTube video, create a learning assessment with 5-7 questions that test deep understanding.
+        prompt = f"""Based on this YouTube video, create a learning assessment with 5-7 questions that test deep understanding.
 
-        VIDEO TITLE: {video_title}
+VIDEO TITLE: {video_title}
 
-        FULL TRANSCRIPT: {transcript[:3000]}...
+FULL TRANSCRIPT: {transcript[:3000]}...
 
-        GENERATED NOTES: {notes_content}
+GENERATED NOTES: {notes_content}
 
-        Create questions in these categories:
+Create questions in these categories:
 
-        1. GAP ANALYSIS (1-2 questions): What important details were in the video but NOT captured in the notes?
+1. GAP ANALYSIS (1-2 questions): What important details were in the video but NOT captured in the notes?
 
-        2. APPLICATION (2-3 questions): How would you apply these concepts in real scenarios?
+2. APPLICATION (2-3 questions): How would you apply these concepts in real scenarios?
 
-        3. ONE-UP CHALLENGES (1-2 questions): How could you improve/extend the implementations or ideas discussed?
+3. ONE-UP CHALLENGES (1-2 questions): How could you improve/extend the implementations or ideas discussed?
 
-        4. SYNTHESIS (1-2 questions): How do these concepts connect to broader topics in the field?
+4. SYNTHESIS (1-2 questions): How do these concepts connect to broader topics in the field?
 
-        For each question, provide:
-        - Clear question text
-        - Model answer (2-3 sentences)
-        - Key concepts being tested
+For each question, provide:
+- Clear question text
+- Model answer (2-3 sentences)
+- Key concepts being tested
 
-        Format as JSON:
-        {{
-            "gap_analysis": [
-                {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
-            ],
-            "application": [
-                {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
-            ],
-            "one_up": [
-                {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
-            ],
-            "synthesis": [
-                {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
-            ]
-        }}
-        """
+IMPORTANT: Return ONLY valid JSON with no additional text, explanation, or markdown formatting.
+
+Return this exact JSON structure:
+{{
+    "gap_analysis": [
+        {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
+    ],
+    "application": [
+        {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
+    ],
+    "one_up": [
+        {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
+    ],
+    "synthesis": [
+        {{"question": "...", "model_answer": "...", "concepts": ["..."]}}
+    ]
+}}"""
 
         try:
             response = self.claude_client.messages.create(
-                model="claude-3-sonnet-20240229",
+                model="claude-sonnet-4-5-20250929",  # Claude Sonnet 4.5 (latest)
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            # Parse the JSON response
-            import json
-            questions_data = json.loads(response.content[0].text)
-            return questions_data
+            # Extract and parse JSON from response
+            response_text = response.content[0].text
+            questions_data = self._extract_json_from_response(response_text)
+
+            if questions_data:
+                return questions_data
+            else:
+                logging.warning("Could not parse JSON from Claude response, using fallback questions")
+                return self._create_fallback_questions(video_title)
 
         except Exception as e:
             logging.error(f"Error calling Claude API for questions: {e}")
             return self._create_fallback_questions(video_title)
+
+    def _extract_json_from_response(self, response_text: str) -> Optional[Dict]:
+        """
+        Extract and parse JSON from Claude's response, handling various formats.
+
+        Handles:
+        - Plain JSON
+        - JSON wrapped in markdown code blocks (```json ... ```)
+        - JSON with explanatory text before/after
+
+        Args:
+            response_text: Raw text response from Claude
+
+        Returns:
+            Parsed JSON dict or None if parsing fails
+        """
+        import json
+
+        # Try 1: Parse as-is (plain JSON)
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            pass
+
+        # Try 2: Extract from markdown code block
+        # Match ```json ... ``` or ``` ... ```
+        code_block_patterns = [
+            r'```json\s*\n(.*?)\n```',  # ```json ... ```
+            r'```\s*\n(.*?)\n```',       # ``` ... ```
+        ]
+
+        for pattern in code_block_patterns:
+            match = re.search(pattern, response_text, re.DOTALL)
+            if match:
+                try:
+                    json_str = match.group(1).strip()
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    continue
+
+        # Try 3: Find JSON object by looking for { ... } pattern
+        # Find the largest valid JSON object in the text
+        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        matches = re.finditer(json_pattern, response_text, re.DOTALL)
+
+        # Try each match, starting with the longest
+        potential_jsons = sorted([m.group(0) for m in matches], key=len, reverse=True)
+        for json_str in potential_jsons:
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                continue
+
+        # Try 4: Look for JSON array pattern
+        array_pattern = r'\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]'
+        matches = re.finditer(array_pattern, response_text, re.DOTALL)
+        potential_arrays = sorted([m.group(0) for m in matches], key=len, reverse=True)
+        for json_str in potential_arrays:
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                continue
+
+        logging.error(f"Could not extract valid JSON from response. First 200 chars: {response_text[:200]}")
+        return None
 
     def _create_fallback_questions(self, video_title: str) -> Dict:
         """Create basic questions when API fails."""

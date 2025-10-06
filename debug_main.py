@@ -29,7 +29,7 @@ def main():
     DEBUG_MODE = "single_url"  # Options: "single_url", "batch", "interactive"
 
     # Single URL mode settings:
-    DEBUG_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Replace with your test URL
+    DEBUG_URL = "https://youtu.be/8w7mv0zjdUg?list=PL4MBLJ9EJIVaMPEU6_FSGdQlorDfU-7VM"  # Replace with your test URL
 
     # Batch mode settings:
     DEBUG_BATCH_FILE = "urls.txt"  # File containing URLs for batch processing
@@ -39,7 +39,7 @@ def main():
     DEBUG_SUBJECT_ONLY = False  # True = cross-reference within subject only
 
     # Provider settings:
-    DEBUG_PROVIDER = "api"  # Options: "api", "scraper", "tor"
+    DEBUG_PROVIDER = "tor"  # Options: "api", "scraper", "tor"
 
     # Tor settings (only used if DEBUG_PROVIDER = "tor"):
     DEBUG_TOR_HOST = "127.0.0.1"

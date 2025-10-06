@@ -59,7 +59,7 @@ class StudyNotesGenerator:
             prompt = self._build_prompt(transcript, related_notes)
 
             message = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-5-20250929",  # Claude Sonnet 4.5 (latest)
                 max_tokens=4000,
                 messages=[{
                     "role": "user",

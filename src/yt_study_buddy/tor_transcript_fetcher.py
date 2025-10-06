@@ -148,16 +148,17 @@ class TorTranscriptFetcher:
                 socket.setdefaulttimeout(timeout)
 
                 try:
-                    transcript_list = YouTubeTranscriptApi.get_transcript(
-                        video_id,
-                        languages=languages,
-                        proxies=self.proxies
-                    )
+                    # Instantiate API and fetch transcript
+                    api = YouTubeTranscriptApi()
+                    fetched = api.fetch(video_id, languages=languages)
+                    # Convert to list of snippets
+                    transcript_list = list(fetched)
                 finally:
                     socket.setdefaulttimeout(old_timeout)
 
                 # Process transcript into the format expected by the app
-                transcript_text = ' '.join([segment['text'] for segment in transcript_list])
+                # FetchedTranscriptSnippet objects have .text attribute (not dict key)
+                transcript_text = ' '.join([snippet.text for snippet in transcript_list])
 
                 # Clean up the transcript
                 transcript_text = re.sub(r'\s+', ' ', transcript_text)
@@ -166,8 +167,8 @@ class TorTranscriptFetcher:
                 # Calculate video duration
                 duration_info = None
                 if transcript_list:
-                    last_segment = transcript_list[-1]
-                    duration_seconds = last_segment['start'] + last_segment['duration']
+                    last_snippet = transcript_list[-1]
+                    duration_seconds = last_snippet.start + last_snippet.duration
                     duration_minutes = int(duration_seconds / 60)
                     duration_info = f"~{duration_minutes} minutes"
 
@@ -223,21 +224,22 @@ class TorTranscriptFetcher:
 
         print("Attempting direct connection...")
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(
-                video_id,
-                languages=languages
-            )
+            # Instantiate API and fetch transcript
+            api = YouTubeTranscriptApi()
+            fetched = api.fetch(video_id, languages=languages)
+            transcript_list = list(fetched)
 
             # Process transcript
-            transcript_text = ' '.join([segment['text'] for segment in transcript_list])
+            # FetchedTranscriptSnippet objects have .text attribute (not dict key)
+            transcript_text = ' '.join([snippet.text for snippet in transcript_list])
             transcript_text = re.sub(r'\s+', ' ', transcript_text)
             transcript_text = transcript_text.replace('[Music]', '').replace('[Applause]', '')
 
             # Calculate duration
             duration_info = None
             if transcript_list:
-                last_segment = transcript_list[-1]
-                duration_seconds = last_segment['start'] + last_segment['duration']
+                last_snippet = transcript_list[-1]
+                duration_seconds = last_snippet.start + last_snippet.duration
                 duration_minutes = int(duration_seconds / 60)
                 duration_info = f"~{duration_minutes} minutes"
 

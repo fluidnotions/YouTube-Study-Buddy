@@ -158,7 +158,7 @@ uv run youtube-study-buddy --subject "Data Science" --file python-videos.txt
 
 | Flag | Description |
 |------|-------------|
-| `--subject <name>` | Organize notes by subject (creates `Study notes/<subject>/` folder) |
+| `--subject <name>` | Organize notes by subject (creates `notes/<subject>/` folder) |
 | `--subject-only` | Cross-reference only within that subject (default: global) |
 | `--file <filename>` | Read URLs from file (one per line) |
 | `--no-assessments` | Disable assessment generation |
@@ -305,7 +305,7 @@ uv run pytest --cov=src/yt_study_buddy
 Notes are saved in organized folders:
 
 ```
-Study notes/
+notes/
 ├── Machine Learning/
 │   ├── Transformers_Explained.md
 │   ├── Transformers_Explained_Assessment.md

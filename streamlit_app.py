@@ -35,7 +35,7 @@ def initialize_session_state():
         st.session_state.show_quick_start = True
 
 
-def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="Study notes"):
+def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="notes"):
     """Create or update the YouTube processor based on settings."""
     return YouTubeStudyNotes(
         subject=subject if subject else None,
@@ -273,27 +273,15 @@ def main():
 
         st.divider()
 
-        # Output path configuration
-        st.header("📁 Output Settings")
+        # Output location (fixed for Docker)
+        st.header("📁 Output Location")
 
-        # Initialize default output path in session state
-        if 'output_base_dir' not in st.session_state:
-            st.session_state.output_base_dir = "Study notes"
+        # Fixed output directory
+        output_base_dir = "notes"
 
-        output_path = st.text_input(
-            "Output Folder Path",
-            value=st.session_state.output_base_dir,
-            help="Path where study notes will be saved. Can be absolute or relative.",
-            disabled=st.session_state.processing
-        )
-
-        # Update session state
-        if output_path != st.session_state.output_base_dir:
-            st.session_state.output_base_dir = output_path
-
-        # Show resolved path
-        resolved_path = os.path.abspath(output_path)
-        st.caption(f"📂 Saves to: `{resolved_path}`")
+        st.info("📂 Notes saved to: `./notes/`")
+        st.caption("💡 **Docker users**: Files appear in `./notes/` on your host machine")
+        st.caption("💡 **CLI users**: Use `--base-dir` flag for custom paths")
 
         st.divider()
 
@@ -445,13 +433,13 @@ def main():
                     # Set processing flag
                     st.session_state.processing = True
 
-                    # Create processor with configured output path
+                    # Create processor with fixed output path
                     processor = create_processor(
                         subject if subject else None,
                         global_context,
                         generate_assessments,
                         auto_categorize and not subject,
-                        base_dir=st.session_state.output_base_dir
+                        base_dir=output_base_dir
                     )
 
                     # Switch to Results tab by rerunning with active tab
@@ -521,9 +509,10 @@ def main():
     with st.sidebar:
         if st.session_state.processed_videos:
             # Create a dummy processor to show stats
+            output_base_dir = "notes"  # Fixed output directory
             processor = create_processor(
                 None, True, True, True,
-                base_dir=st.session_state.output_base_dir
+                base_dir=output_base_dir
             )
             display_knowledge_graph_stats(processor)
 
@@ -552,13 +541,13 @@ def main():
         4. **Process and view results**:
            - Click "🚀 Process Videos" to start
            - View progress and results in the "Results" tab
-           - Files are saved to `Study notes/[Subject]/` folders
+           - Files are saved to `notes/[Subject]/` folders
 
         ### 📁 Output Structure
 
         Notes are saved in organized folders:
         ```
-        Study notes/
+        notes/
         ├── [Subject Name]/
         │   ├── video1_notes.md
         │   └── video2_notes.md

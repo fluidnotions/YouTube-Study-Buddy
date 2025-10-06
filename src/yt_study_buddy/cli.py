@@ -23,7 +23,7 @@ from .assessment_generator import AssessmentGenerator
 class YouTubeStudyNotes:
     """Main application class for processing YouTube videos into study notes."""
 
-    def __init__(self, subject=None, global_context=True, base_dir="Study notes",
+    def __init__(self, subject=None, global_context=True, base_dir="notes",
                  generate_assessments=True, auto_categorize=True):
         self.subject = subject
         self.global_context = global_context
@@ -226,7 +226,7 @@ Usage:
   youtube-study-buddy --subject "Topic" <url1> <url2> ...  # Process URLs with subject organization
 
 Options:
-  --subject <name>         Organize notes by subject (creates Study notes/<subject>/ folder)
+  --subject <name>         Organize notes by subject (creates notes/<subject>/ folder)
   --subject-only           Cross-reference only within the specified subject (default: global)
   --file <filename>        Read URLs from file (one per line)
   --no-assessments         Disable assessment generation
@@ -250,7 +250,7 @@ Requirements:
   - Tor proxy running: docker-compose up -d tor-proxy
 
 Output:
-  - Notes saved in Study notes/<subject>/ folders
+  - Notes saved in notes/<subject>/ folders
   - Cross-references to related notes automatically included
   - Obsidian [[links]] automatically added between related notes
 

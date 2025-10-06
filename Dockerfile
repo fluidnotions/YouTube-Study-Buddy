@@ -18,13 +18,12 @@ COPY pyproject.toml .
 COPY src/ ./src/
 COPY streamlit_app.py .
 COPY main.py .
-COPY debug_main.py .
 
 # Install Python dependencies using UV
 RUN uv pip install --system --no-cache -e .
 
-# Create default output directory
-RUN mkdir -p "Study notes"
+# Create default output directory (no spaces for cleaner paths)
+RUN mkdir -p /app/notes
 
 # Expose Streamlit port
 EXPOSE 8501

@@ -6,10 +6,10 @@ services:
     container_name: youtube-study-buddy
     ports:
       - "8501:8501"
-    environment:
-      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+    env_file:
+      - .env
     volumes:
-      - ./Study notes:/app/Study notes
+      - ./notes:/app/notes
     depends_on:
       - tor-proxy
     restart: unless-stopped

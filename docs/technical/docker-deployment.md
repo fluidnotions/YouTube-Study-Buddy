@@ -154,7 +154,7 @@ services:
     environment:
       - CLAUDE_API_KEY=${CLAUDE_API_KEY}
     volumes:
-      - ./Study notes:/app/Study notes
+      - ./notes:/app/notes
     restart: unless-stopped
 ```
 
@@ -172,7 +172,7 @@ services:
     environment:
       - CLAUDE_API_KEY=${CLAUDE_API_KEY}
     volumes:
-      - ./Study notes:/app/Study notes
+      - ./notes:/app/notes
     depends_on:
       - tor-proxy
     restart: unless-stopped
@@ -213,21 +213,32 @@ docker-compose up --build
 
 ```yaml
 volumes:
-  - ./Study notes:/app/Study notes
+  - ./notes:/app/notes
 ```
 
 ### Custom Output Directory
 
+**Important**: The Streamlit web interface uses a fixed output path of `notes/` inside the container. To change where notes are saved on your host machine, modify the volume mount in `docker-compose.yml`:
+
 ```yaml
 volumes:
-  - /path/to/your/obsidian/vault:/app/Study notes
+  - /path/to/your/obsidian/vault:/app/notes
 ```
+
+**Why is the path fixed?**
+
+Docker containers can only access directories that are explicitly mounted via volumes. The Streamlit UI runs inside the container and cannot access arbitrary paths on your host filesystem. To maintain consistency and avoid confusion, the output path is fixed to `/app/notes` inside the container.
+
+**How to customize the output location:**
+
+1. **For Docker users**: Edit the volume mount in `docker-compose.yml` to point to your desired host directory
+2. **For CLI users**: Use the `--base-dir` flag when running `youtube-study-buddy` directly
 
 ### Multiple Mounts
 
 ```yaml
 volumes:
-  - ./Study notes:/app/Study notes           # Output directory
+  - ./notes:/app/notes           # Output directory
   - ./.env:/app/.env:ro                      # Environment file (read-only)
   - ./custom-config.yaml:/app/config.yaml:ro # Custom config
 ```
@@ -285,7 +296,7 @@ services:
     environment:
       - CLAUDE_API_KEY=${CLAUDE_API_KEY}
     volumes:
-      - ./Study notes:/app/Study notes
+      - ./notes:/app/notes
 ```
 
 ### Resource Limits
@@ -340,7 +351,7 @@ docker-compose logs youtube-study-buddy
 lsof -i :8501
 
 # Fix volume permissions
-chmod -R 755 "Study notes/"
+chmod -R 755 "notes/"
 
 # Verify environment variables
 docker-compose config
@@ -373,10 +384,10 @@ docker inspect youtube-study-buddy | grep Mounts -A 10
 Fix permissions:
 ```bash
 # Create directory if missing
-mkdir -p "Study notes"
+mkdir -p "notes"
 
 # Set permissions
-chmod 755 "Study notes"
+chmod 755 "notes"
 ```
 
 ---
@@ -514,7 +525,7 @@ docs/
 .vscode/
 __pycache__/
 *.pyc
-Study notes/
+notes/
 ```
 
 ### Scan for Vulnerabilities

@@ -1,10 +1,10 @@
-# YT Study Buddy 📚
+# YouTube Study Buddy 📚
 
-**Technology moves faster than traditional education.** YouTube has become the world's largest university, but watching videos is passive learning. **YT Study Buddy** transforms YouTube content into an active learning system using AI-powered note generation, learning assessments, and knowledge graph building.
+**Technology moves faster than traditional education.** YouTube has become the world's largest university, but watching videos is passive learning. **YouTube Study Buddy** transforms YouTube content into an active learning system using AI-powered note generation, learning assessments, and knowledge graph building.
 
 ## 🧠 Why This Matters
 
-Traditional note-taking creates the "illusion of competence" – you transcribe content but don't truly learn. YT Study Buddy applies cognitive science:
+Traditional note-taking creates the "illusion of competence" – you transcribe content but don't truly learn. YouTube Study Buddy applies cognitive science:
 - **Active recall** through assessment questions
 - **Spaced repetition** by separating note review from watching
 - **Interconnected learning** with cross-referenced knowledge graphs
@@ -13,8 +13,8 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 
 ## 💰 The Value
 
-**Paid alternatives** ($10-50/month): NoteGPT, Notta, Eightify – subscription requiredI think you might have forgotten that I changed the name from YT to YouTube, so it should be replaced everywhere, which I can do quite easily, but also in the package name. Thank you.
-**YT Study Buddy**: 100% free, runs locally, unlimited use, your data stays private
+**Paid alternatives** ($10-50/month): NoteGPT, Notta, Eightify – subscription requiredI think you might have forgotten that I changed the name from YouTube to YouTube, so it should be replaced everywhere, which I can do quite easily, but also in the package name. Thank you.
+**YouTube Study Buddy**: 100% free, runs locally, unlimited use, your data stays private
 
 ## ✨ What You Get
 
@@ -62,7 +62,7 @@ uv run youtube-study-buddy --help
 
 ## 🗺️ Using With Obsidian
 
-[Obsidian](https://obsidian.md) is a free knowledge base app that lets you build a "second brain." YT Study Buddy generates notes with:
+[Obsidian](https://obsidian.md) is a free knowledge base app that lets you build a "second brain." YouTube Study Buddy generates notes with:
 - **Wiki-style links** (`[[Related Topic]]`) that connect concepts across videos
 - **Graph view** showing how your knowledge interconnects
 - **Bidirectional linking** – see what relates to each note

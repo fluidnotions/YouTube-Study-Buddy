@@ -2,10 +2,10 @@
 Quick smoke tests to verify basic functionality.
 These tests run fast and don't require external dependencies.
 """
-import pytest
 import sys
-import os
 from pathlib import Path
+
+import pytest
 
 # Add src to path
 project_root = Path(__file__).parent.parent

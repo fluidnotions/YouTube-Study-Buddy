@@ -26,6 +26,7 @@ dependencies = [
     "PySocks>=1.7.1",
     "stem>=1.8.0",
     "yt-dlp>=2025.9.26",
+    "fuzzywuzzy>=0.18.0",
 ]
 
 [project.optional-dependencies]

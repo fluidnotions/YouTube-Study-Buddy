@@ -1,11 +1,11 @@
 """
 Pytest configuration and fixtures for YouTube to Study Notes tests.
 """
-import pytest
 import sys
-import os
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 # Add src to path for imports
 project_root = Path(__file__).parent.parent

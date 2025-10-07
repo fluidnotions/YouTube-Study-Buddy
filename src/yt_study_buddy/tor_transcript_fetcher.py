@@ -3,15 +3,16 @@ Tor proxy-based transcript fetcher for YouTube videos.
 
 Bypasses IP blocks by routing requests through Tor network.
 """
-import time
 import random
-from typing import Optional, List, Dict, Any
-from youtube_transcript_api import YouTubeTranscriptApi
-import requests
 import re
 import socket
-from stem import Signal
+import time
+from typing import Optional, List, Dict, Any
+
+import requests
+from stem import Signal, SocketError
 from stem.control import Controller
+from youtube_transcript_api import YouTubeTranscriptApi
 
 
 class TorTranscriptFetcher:
@@ -43,35 +44,54 @@ class TorTranscriptFetcher:
         self.tor_control_port = tor_control_port
         self.tor_control_password = tor_control_password
 
-    def rotate_tor_circuit(self) -> bool:
+    def rotate_tor_circuit(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
-        Request a new Tor circuit (new exit node).
+        Request a new Tor circuit (new exit node) with retry logic.
+
+        Args:
+            max_retries: Maximum number of connection attempts (default: 3)
+            retry_delay: Delay between retries in seconds (default: 2.0)
 
         Returns:
             True if circuit was rotated successfully, False otherwise
         """
-        try:
-            with Controller.from_port(
-                address=self.tor_host,
-                port=self.tor_control_port
-            ) as controller:
-                if self.tor_control_password:
-                    controller.authenticate(password=self.tor_control_password)
+        for attempt in range(max_retries):
+            try:
+                with Controller.from_port(
+                    address=self.tor_host,
+                    port=self.tor_control_port
+                ) as controller:
+                    if self.tor_control_password:
+                        controller.authenticate(password=self.tor_control_password)
+                    else:
+                        controller.authenticate()
+
+                    controller.signal(Signal.NEWNYM)
+
+                    # Wait for circuit to establish
+                    time.sleep(controller.get_newnym_wait())
+
+                    print("✓ Tor circuit rotated")
+                    return True
+
+            except (ConnectionRefusedError, OSError, SocketError) as e:
+                # Connection errors - Tor might not be running yet or temporarily down
+                if attempt < max_retries - 1:
+                    print(f"Tor control port not ready (attempt {attempt + 1}/{max_retries}): {e}")
+                    print(f"Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
                 else:
-                    controller.authenticate()
+                    print(f"Warning: Could not connect to Tor control port after {max_retries} attempts: {e}")
+                    print("Tor control port may not be running or accessible.")
+                    print("Continuing with existing circuit...")
 
-                controller.signal(Signal.NEWNYM)
+            except Exception as e:
+                # Authentication errors or other issues - don't retry
+                print(f"Warning: Could not rotate Tor circuit: {e}")
+                print("Continuing with existing circuit...")
+                return False
 
-                # Wait for circuit to establish
-                time.sleep(controller.get_newnym_wait())
-
-                print("✓ Tor circuit rotated")
-                return True
-
-        except Exception as e:
-            print(f"Warning: Could not rotate Tor circuit: {e}")
-            print("Continuing with existing circuit...")
-            return False
+        return False
 
     def check_tor_connection(self) -> bool:
         """

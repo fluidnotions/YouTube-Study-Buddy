@@ -2,6 +2,7 @@
 Tests for VideoProcessor class and URL handling.
 """
 import pytest
+
 from yt_study_buddy.video_processor import VideoProcessor
 
 

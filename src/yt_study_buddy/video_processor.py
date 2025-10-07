@@ -4,6 +4,7 @@ Uses Tor proxy exclusively for reliable transcript fetching.
 """
 import re
 from typing import Optional
+
 from .transcript_provider import TranscriptProvider, create_transcript_provider
 
 

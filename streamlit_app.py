@@ -4,13 +4,13 @@ Streamlit Web Interface for YouTube Study Buddy
 Provides a user-friendly web interface for processing YouTube videos into study notes
 """
 
-import streamlit as st
 import os
-import sys
-import tempfile
-import time
 import subprocess
+import sys
+import time
 from pathlib import Path
+
+import streamlit as st
 
 # Add src directory to path
 current_dir = Path(__file__).parent
@@ -18,7 +18,6 @@ src_dir = current_dir / "src"
 sys.path.insert(0, str(src_dir))
 
 from src.yt_study_buddy.cli import YouTubeStudyNotes
-from yt_study_buddy.knowledge_graph import KnowledgeGraph
 
 
 def initialize_session_state():

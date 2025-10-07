@@ -1,9 +1,9 @@
 """YouTube Study Buddy package exports."""
 
-from .video_processor import VideoProcessor
 from .knowledge_graph import KnowledgeGraph
-from .study_notes_generator import StudyNotesGenerator
 from .obsidian_linker import ObsidianLinker
+from .study_notes_generator import StudyNotesGenerator
+from .video_processor import VideoProcessor
 
 __all__ = [
     "__version__",

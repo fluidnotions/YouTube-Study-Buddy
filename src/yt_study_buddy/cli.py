@@ -7,17 +7,17 @@ Usage:
     youtube-study-buddy --subject "Topic" <url1> <url2>
 """
 
-import sys
-import os
 import argparse
+import os
+import sys
 import time
 
-from .video_processor import VideoProcessor
-from .knowledge_graph import KnowledgeGraph
-from .study_notes_generator import StudyNotesGenerator
-from .obsidian_linker import ObsidianLinker
-from .auto_categorizer import AutoCategorizer
 from .assessment_generator import AssessmentGenerator
+from .auto_categorizer import AutoCategorizer
+from .knowledge_graph import KnowledgeGraph
+from .obsidian_linker import ObsidianLinker
+from .study_notes_generator import StudyNotesGenerator
+from .video_processor import VideoProcessor
 
 
 class YouTubeStudyNotes:

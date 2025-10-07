@@ -2,12 +2,14 @@
 Transcript provider interface and implementations.
 Uses Tor proxy exclusively for reliable transcript fetching.
 """
-from typing import Protocol, Dict, Any, Optional
-from abc import ABC, abstractmethod
-import requests
+import random
 import re
 import time
-import random
+from abc import ABC, abstractmethod
+from typing import Protocol, Dict, Any, Optional
+
+import requests
+
 from .tor_transcript_fetcher import TorTranscriptFetcher
 
 

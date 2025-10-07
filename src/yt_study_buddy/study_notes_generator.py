@@ -2,6 +2,7 @@
 Study notes generation using Claude API with cross-referencing capabilities.
 """
 import os
+
 from dotenv import load_dotenv
 
 try:
@@ -57,9 +58,9 @@ class StudyNotesGenerator:
 
         try:
             prompt = self._build_prompt(transcript, related_notes)
-
+            model = os.getenv('GENERATE_NOTES_MODEL', 'claude-sonnet-4-5-2025092')
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",  # Claude Sonnet 4.5 (latest)
+                model=model,
                 max_tokens=4000,
                 messages=[{
                     "role": "user",

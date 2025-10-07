@@ -4,7 +4,6 @@ Handles fuzzy matching and prevents nested linking issues.
 """
 import os
 import re
-from pathlib import Path
 
 try:
     from fuzzywuzzy import fuzz, process

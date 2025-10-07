@@ -44,7 +44,7 @@ docker build --no-cache -t youtube-study-buddy:dev .
 **Production Build (optimized):**
 ```bash
 docker build \
-  --build-arg PYouTubeHON_VERSION=3.13 \
+  --build-arg PYHON_VERSION=3.13 \
   -t youtube-study-buddy:latest \
   .
 ```
@@ -190,19 +190,19 @@ services:
 
 ```bash
 # Start services
-docker-compose up
+docker compose up
 
 # Start in background
-docker-compose up -d
+docker compose up -d
 
 # Stop services
-docker-compose down
+docker compose down
 
 # View logs
-docker-compose logs -f youtube-study-buddy
+docker compose logs -f youtube-study-buddy
 
 # Rebuild and restart
-docker-compose up --build
+docker compose up --build
 ```
 
 ---
@@ -369,7 +369,7 @@ docker-compose config
 docker pull fluidnotions/youtube-study-buddy:latest
 
 # Or build locally
-docker-compose build
+docker compose build
 ```
 
 ### Volume Mount Issues

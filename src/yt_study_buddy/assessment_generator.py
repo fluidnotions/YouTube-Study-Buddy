@@ -4,9 +4,9 @@ Generates questions that test understanding beyond just the notes.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
 import re
 from datetime import datetime
+from typing import Dict, Optional
 
 
 class AssessmentGenerator:

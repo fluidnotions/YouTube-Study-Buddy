@@ -3,10 +3,11 @@ Auto-categorization module using semantic similarity.
 Automatically categorizes videos into subjects when no subject is provided.
 """
 
-import os
 import logging
-from typing import List, Optional, Tuple
+import os
 import re
+from typing import List, Optional
+
 from dotenv import load_dotenv
 
 # Load environment variables

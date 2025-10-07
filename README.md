@@ -29,8 +29,6 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 
 ## 🚀 Quick Start
 
-**Single container deployment with embedded Tor proxy:**
-
 ```bash
 # 1. Get a free Claude API key from https://console.anthropic.com/
 
@@ -54,8 +52,6 @@ docker compose up -d
 ```
 
 **That's it!** Open http://localhost:8501 in your browser.
-
-> **Note**: Tor is now bundled inside the container – no separate proxy needed!
 
 ### CLI Usage (For Automation)
 

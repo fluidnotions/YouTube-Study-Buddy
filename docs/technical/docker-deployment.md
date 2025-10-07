@@ -104,7 +104,7 @@ docker logs youtube-study-buddy
 ## Multi-Platform Builds
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
+docker build --platform linux/amd64,linux/arm64 \
   -t fluidnotions/youtube-study-buddy:latest \
   --push .
 ```

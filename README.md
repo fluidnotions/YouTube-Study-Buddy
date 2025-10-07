@@ -29,19 +29,33 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 
 ## 🚀 Quick Start
 
+**Single container deployment with embedded Tor proxy:**
+
 ```bash
 # 1. Get a free Claude API key from https://console.anthropic.com/
 
-# 2. Create .env file with your API key
-echo "CLAUDE_API_KEY=your_key_here" > .env
-
-# 3. Run with Docker Compose
-docker-compose up
+# 2. Run with Docker (simplest method)
+docker run -d \
+  --name youtube-study-buddy \
+  -p 8501:8501 \
+  -e CLAUDE_API_KEY=your_key_here \
+  -v ./notes:/app/notes \
+  fluidnotions/youtube-study-buddy:latest
 ```
 
-> **Note**: Docker image pulls from `fluidnotions/youtube-study-buddy:latest`
+Or use Docker Compose:
 
-**That's it!** Your browser opens automatically to the web interface.
+```bash
+# Create .env file with your API key
+echo "CLAUDE_API_KEY=your_key_here" > .env
+
+# Run with Docker Compose
+docker compose up -d
+```
+
+**That's it!** Open http://localhost:8501 in your browser.
+
+> **Note**: Tor is now bundled inside the container – no separate proxy needed!
 
 ### CLI Usage (For Automation)
 

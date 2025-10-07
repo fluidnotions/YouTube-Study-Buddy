@@ -25,10 +25,10 @@ This guide covers building, publishing, and deploying the YouTube Study Buddy Do
 
 ```bash
 # From the project root directory
-docker build -t youtube-study-buddy:latest .
+docker buildx build -t youtube-study-buddy:latest .
 
 # With specific version tag
-docker build -t youtube-study-buddy:v1.0.0 .
+docker buildx build -t youtube-study-buddy:v1.0.0 .
 
 # Multi-platform build (for ARM64 and AMD64)
 docker buildx build --platform linux/amd64,linux/arm64 -t youtube-study-buddy:latest .
@@ -38,12 +38,12 @@ docker buildx build --platform linux/amd64,linux/arm64 -t youtube-study-buddy:la
 
 **Development Build (with source changes):**
 ```bash
-docker build --no-cache -t youtube-study-buddy:dev .
+docker buildx build --no-cache -t youtube-study-buddy:dev .
 ```
 
 **Production Build (optimized):**
 ```bash
-docker build \
+docker buildx build \
   --build-arg PYHON_VERSION=3.13 \
   -t youtube-study-buddy:latest \
   .
@@ -112,7 +112,7 @@ VERSION="1.0.0"
 
 # Build image
 echo "Building Docker image..."
-docker build -t youtube-study-buddy:${VERSION} -t youtube-study-buddy:latest .
+docker buildx build -t youtube-study-buddy:${VERSION} -t youtube-study-buddy:latest .
 
 # Tag for Docker Hub
 echo "Tagging image..."
@@ -203,6 +203,9 @@ docker compose logs -f youtube-study-buddy
 
 # Rebuild and restart
 docker compose up --build
+
+# Pull latest images
+docker compose pull
 ```
 
 ---
@@ -337,7 +340,7 @@ services:
 
 **Check logs:**
 ```bash
-docker-compose logs youtube-study-buddy
+docker compose logs youtube-study-buddy
 ```
 
 **Common issues:**
@@ -368,7 +371,7 @@ docker-compose config
 # Pull latest from Docker Hub
 docker pull fluidnotions/youtube-study-buddy:latest
 
-# Or build locally
+# Or build locally with compose
 docker compose build
 ```
 
@@ -477,10 +480,10 @@ docker rmi $(docker images -q youtube-study-buddy)
 
 ```bash
 # Pull latest image
-docker-compose pull
+docker compose pull
 
 # Restart with new image
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Version Management
@@ -491,7 +494,7 @@ git tag v1.0.0
 git push origin v1.0.0
 
 # Build for release
-docker build -t fluidnotions/youtube-study-buddy:v1.0.0 .
+docker buildx build -t fluidnotions/youtube-study-buddy:v1.0.0 .
 docker push fluidnotions/youtube-study-buddy:v1.0.0
 ```
 

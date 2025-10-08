@@ -17,6 +17,9 @@ COPY streamlit_app.py .
 COPY main.py .
 COPY entrypoint.sh .
 
+ENV UV_HTTP_TIMEOUT=300
+RUN uv pip install --system --no-cache \
+    torch --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --system --no-cache -e .
 
 RUN mkdir -p /app/notes

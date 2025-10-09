@@ -228,6 +228,21 @@ def process_single_video(url, processor, progress_container):
             processor.obsidian_linker.process_file(filename)
             processor.knowledge_graph.refresh_cache()
 
+            # Generate assessment if enabled
+            if processor.assessment_generator:
+                try:
+                    status_text.text("📝 Generating assessment...")
+                    assessment_content = processor.assessment_generator.generate_assessment(
+                        transcript, study_notes, video_title, original_url
+                    )
+                    assessment_filename = processor.assessment_generator.create_assessment_filename(video_title)
+                    assessment_path = os.path.join(processor.output_dir, assessment_filename)
+
+                    with open(assessment_path, 'w', encoding='utf-8') as f:
+                        f.write(assessment_content)
+                except Exception as e:
+                    st.warning(f"⚠️ Assessment generation failed: {e}")
+
             progress_bar.progress(100)
             status_text.text("✅ Successfully processed!")
 

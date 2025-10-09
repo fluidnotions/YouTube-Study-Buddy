@@ -126,6 +126,23 @@ I'm going to be using them to annotate and highlight sections and connect them t
 
         return prompt
 
+    @staticmethod
+    def extract_title_from_notes(study_notes):
+        """
+        Extract the video title from Claude's generated notes.
+        Claude generates notes starting with '# Video Study Notes: <title>'
+        or '# VIDEO STUDY NOTES: <title>'.
+
+        Returns:
+            Extracted title or None if not found
+        """
+        import re
+        # Look for the pattern at the start of the notes
+        match = re.search(r'^#\s+(?:VIDEO\s+)?[Vv]ideo\s+[Ss]tudy\s+[Nn]otes:\s*(.+)$', study_notes, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+        return None
+
     def create_markdown_file(self, title, video_url, study_notes, output_dir="Study notes", video_id=None):
         """Create a markdown file with the study notes."""
         from .video_processor import VideoProcessor  # Import here to avoid circular imports
@@ -133,11 +150,23 @@ I'm going to be using them to annotate and highlight sections and connect them t
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
 
+        # Try to extract a better title from the generated notes
+        extracted_title = self.extract_title_from_notes(study_notes)
+        if extracted_title:
+            # Use the extracted title for both the filename and header
+            final_title = extracted_title
+        elif title and not title.startswith("Video_"):
+            # Use the provided title if it's not a fallback
+            final_title = title
+        else:
+            # Fallback to video_id based title
+            final_title = f"Video_{video_id}" if video_id else title
+
         # Create markdown content with title and link header
-        markdown_content = f"# {title}\\n\\n[YouTube Video]({video_url})\\n\\n---\\n\\n{study_notes}"
+        markdown_content = f"# {final_title}\n\n[YouTube Video]({video_url})\n\n---\n\n{study_notes}"
 
         # Generate safe filename
-        safe_title = VideoProcessor.sanitize_filename(title)
+        safe_title = VideoProcessor.sanitize_filename(final_title)
         filename = os.path.join(output_dir, f"{safe_title}.md")
 
         # Handle duplicate filenames

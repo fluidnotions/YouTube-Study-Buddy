@@ -4,7 +4,7 @@ services:
   youtube-study-buddy:
     build:
       context: .
-      dockerfile: Dockerfile.app-only
+      dockerfile: Dockerfile
     container_name: youtube-study-buddy-separate-tor
     ports:
       - "8501:8501"
@@ -15,6 +15,7 @@ services:
       - TOR_PORT=9050
     volumes:
       - ./notes:/app/notes
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     depends_on:
       tor-proxy:
         condition: service_healthy

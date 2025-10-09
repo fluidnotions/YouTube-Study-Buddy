@@ -138,22 +138,24 @@ class YouTubeStudyNotes:
                 video_url=url
             )
 
-            # Add cross-references using knowledge graph
-            print("Adding cross-references to related notes...")
-            linked_notes = self.obsidian_linker.add_links(study_notes, video_title)
-
-            # Save to file (thread-safe)
+            # Save to file using the notes generator's method
             sanitized_title = self.video_processor.sanitize_filename(video_title)
             filename = f"{sanitized_title}.md"
             filepath = os.path.join(self.output_dir, filename)
 
+            # Create markdown file with header
+            original_url = f"https://www.youtube.com/watch?v={video_id}"
+            markdown_content = f"# {video_title}\n\n[YouTube Video]({original_url})\n\n---\n\n{study_notes}"
+
+            # Write file (thread-safe for parallel processing)
             with self._file_lock:
                 with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(linked_notes)
+                    f.write(markdown_content)
                 print(f"✓ Study notes saved to {filename}")
 
-                # Store original URL for reference
-                original_url = url
+                # Add cross-references using Obsidian linker
+                print("Adding cross-references to related notes...")
+                self.obsidian_linker.process_file(filepath)
 
                 # Generate assessment if enabled
                 if self.assessment_generator:
@@ -175,9 +177,8 @@ class YouTubeStudyNotes:
                     except Exception as e:
                         print(f"  Warning: Assessment generation failed: {e}")
 
-            # Update knowledge graph with new note (thread-safe)
+            # Update knowledge graph cache (thread-safe)
             with self._kg_lock:
-                self.knowledge_graph.add_note(video_title, linked_notes)
                 # Refresh knowledge graph cache to include the new note
                 self.knowledge_graph.refresh_cache()
 

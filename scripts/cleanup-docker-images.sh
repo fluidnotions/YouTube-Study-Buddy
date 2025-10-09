@@ -1,6 +1,9 @@
 #!/bin/bash
 # Cleanup old YouTube Study Buddy Docker images
 
+# Change to project root directory
+cd "$(dirname "$0")/.."
+
 echo "YouTube Study Buddy - Docker Image Cleanup"
 echo "=========================================="
 echo ""

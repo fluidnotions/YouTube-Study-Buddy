@@ -1,6 +1,9 @@
 #!/bin/bash
 # Fix permissions on existing Docker-generated files
 
+# Change to project root directory
+cd "$(dirname "$0")/.."
+
 echo "Fixing permissions on yt_notes files..."
 
 # Fix ownership of files in /home/justin/Documents/vaults/yt_notes/

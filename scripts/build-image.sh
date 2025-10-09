@@ -3,6 +3,9 @@
 
 set -e
 
+# Change to project root directory
+cd "$(dirname "$0")/.."
+
 IMAGE_NAME="fluidnotions/youtube-study-buddy"
 VERSION="${1:-latest}"
 

@@ -2,14 +2,22 @@ version: '3.8'
 
 services:
   youtube-study-buddy:
-    build: .
-    # Or use: image: fluidnotions/youtube-study-buddy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: youtube-study-buddy
     ports:
-      - "8501:8501"
+      - "8501:8501"  # Streamlit UI
+      - "9050:9050"  # Tor SOCKS proxy (optional, for debugging)
+      - "9051:9051"  # Tor control port (optional, for debugging)
     env_file:
       - .env
     volumes:
       - ./notes:/app/notes
     restart: unless-stopped
-    # Note: Tor is now installed inside the container, no separate service needed
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start-period: 40s

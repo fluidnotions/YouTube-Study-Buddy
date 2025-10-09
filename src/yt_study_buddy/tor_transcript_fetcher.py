@@ -147,7 +147,15 @@ class TorTranscriptFetcher:
                 # Rotate circuit on retries (not on first attempt)
                 if attempt > 0:
                     print(f"Retry attempt {attempt + 1}/{max_retries}...")
-                    self.rotate_tor_circuit()
+
+                    # Try to rotate circuit, but don't fail if control port unavailable
+                    rotation_success = self.rotate_tor_circuit()
+
+                    # If circuit rotation failed, add extra delay to let rate limits expire
+                    if not rotation_success:
+                        extra_delay = 10 * attempt  # 10s, 20s, 30s, 40s...
+                        print(f"Circuit rotation unavailable, adding {extra_delay}s delay...")
+                        time.sleep(extra_delay)
 
                     # Exponential backoff with jitter
                     backoff = (2 ** attempt) + random.uniform(0, 1)

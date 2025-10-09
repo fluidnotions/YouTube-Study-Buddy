@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  youtube-study-buddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.app-only
+    container_name: youtube-study-buddy
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - TOR_HOST=tor-proxy
+      - TOR_PORT=9050
+    volumes:
+      - ./notes:/app/notes
+    depends_on:
+      tor-proxy:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tor-proxy:
+    image: dperson/torproxy:latest
+    container_name: ytstudybuddy-tor-proxy
+    restart: unless-stopped
+    # Ports exposed only internally to youtube-study-buddy container
+    # No need to expose to host since app connects via docker network
+    # ports:
+    #   - "8118:8118"  # HTTP proxy (Privoxy)
+    #   - "9050:9050"  # SOCKS5 proxy (Tor)
+    environment:
+      - LOCATION=US          # Prefer US exit nodes
+      # - TORUSER=torrr      # Optional: HTTP proxy auth
+      # - PASSWORD=secret    # Optional: HTTP proxy auth password
+    volumes:
+      - tor-data:/var/lib/tor
+    healthcheck:
+      test: ["CMD", "curl", "-x", "socks5://localhost:9050", "https://check.torproject.org", "-s", "-o", "/dev/null", "-w", "%{http_code}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  tor-data:
+    driver: local
+
+# Two container setup:
+# - tor-proxy: Dedicated Tor proxy (dperson/torproxy)
+# - youtube-study-buddy: App container connects to tor-proxy
+#
+# Key difference from single container:
+# - Tor runs in separate network context (different docker network)
+# - May help avoid some YouTube blocking (separate IP context)
+# - dperson/torproxy has proven configuration

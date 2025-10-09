@@ -29,48 +29,55 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 
 ## 🚀 Quick Start
 
-```bash
-# 1. Get a free Claude API key from https://console.anthropic.com/
+### Prerequisites
+- Docker installed
+- Claude API key ([Get free key](https://console.anthropic.com/))
 
-# 2. Run with Docker (simplest method)
+### Run with Docker
+
+```bash
+# Build the image
+docker build -t youtube-study-buddy .
+
+# Run the container
 docker run -d \
   --name youtube-study-buddy \
   -p 8501:8501 \
   -e CLAUDE_API_KEY=your_key_here \
-  -v ./notes:/app/notes \
-  fluidnotions/youtube-study-buddy:latest
+  -v $(pwd)/notes:/app/notes \
+  youtube-study-buddy
 ```
 
-Or use Docker Compose:
+Or use the convenience script:
 
 ```bash
 # Create .env file with your API key
 echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Run with Docker Compose
+# Run
+./run-docker.sh
+```
+
+Or use Docker Compose:
+
+```bash
+# Create .env file
+echo "CLAUDE_API_KEY=your_key_here" > .env
+
+# Run
 docker compose up -d
 ```
 
-**That's it!** Open http://localhost:8501 in your browser.
+**Access the app**: http://localhost:8501
 
-### CLI Usage (For Automation)
+**View logs**: `docker logs -f youtube-study-buddy`
 
-```bash
-# Install package
-uv sync
+### Features
 
-# Process URLs directly
-uv run youtube-study-buddy "https://youtube.com/watch?v=xyz"
-
-# Process from file
-uv run youtube-study-buddy --file playlist-urls.txt
-
-# With subject organization
-uv run youtube-study-buddy --subject "Machine Learning" url1 url2
-
-# Full help
-uv run youtube-study-buddy --help
-```
+- **Tor Integration**: Includes Tor proxy to handle YouTube rate limiting
+- **Circuit Rotation**: Automatically rotates Tor circuits on retry attempts
+- **Single Container**: Everything runs in one Docker container for simplicity
+- **Health Checks**: Built-in monitoring for both Tor and Streamlit
 
 ## 🗺️ Using With Obsidian
 
@@ -116,13 +123,29 @@ Your notes automatically link together, building a knowledge graph you can visua
 
 ---
 
-## 🛠️ Alternative Ways to Run
+## 🛠️ Development & Advanced Usage
 
-Don't want to use Docker? See **[Alternative Setup Methods](docs/technical/alternative-setup.md)** for:
-- Running from source with Python/UV
-- CLI usage and command-line flags
-- Development setup for contributors
-- Manual installation instructions
+See the [docs](docs/) folder for:
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Detailed Docker usage
+- **[Build Instructions](docs/BUILD_INSTRUCTIONS.md)** - Building from source
+- **[Technical Setup](docs/technical/alternative-setup.md)** - Running without Docker
+- **[Solution Summary](docs/SOLUTION_SUMMARY.md)** - Architecture details
+
+### CLI Usage (Development)
+
+```bash
+# Install package locally
+uv sync
+
+# Process URLs directly
+uv run youtube-study-buddy "https://youtube.com/watch?v=xyz"
+
+# Process from file
+uv run youtube-study-buddy --file playlist-urls.txt
+
+# Full help
+uv run youtube-study-buddy --help
+```
 
 ---
 

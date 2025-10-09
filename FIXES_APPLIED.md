@@ -160,7 +160,7 @@ Docker containers run as root by default, creating files owned by root when writ
 
 1. **Fix permissions on existing Docker-created files**:
    ```bash
-   ./fix_permissions.sh
+   ./scripts/fix_permissions.sh
    ```
 
 2. **Rebuild Docker containers** (to apply user mapping):
@@ -220,7 +220,7 @@ To verify fixes are working:
 - ✅ Existing broken notes repaired (7 files fixed)
 
 ### Remaining Manual Steps
-1. Run `./fix_permissions.sh` to fix existing file ownership
+1. Run `./scripts/fix_permissions.sh` to fix existing file ownership
 2. Rebuild Docker containers to apply user mapping
 3. Process new videos to verify all fixes work end-to-end
 

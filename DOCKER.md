@@ -27,10 +27,10 @@ open http://localhost:8501
 docker-compose -f docker-compose.dev.yml build
 
 # Or use the build script (recommended)
-./build-image.sh
+./scripts/build-image.sh
 
 # With version tag
-./build-image.sh v1.0.0
+./scripts/build-image.sh v1.0.0
 ```
 
 ### Running Development Build
@@ -49,7 +49,7 @@ Over time, you may accumulate old images with different names. Clean them up:
 
 ```bash
 # Run the cleanup script
-./cleanup-docker-images.sh
+./scripts/cleanup-docker-images.sh
 
 # This will remove:
 # - tor-debugging-youtube-study-buddy:latest
@@ -65,8 +65,10 @@ Over time, you may accumulate old images with different names. Clean them up:
 ├── docker-compose.yml          # Production (uses pre-built image)
 ├── docker-compose.dev.yml      # Development (builds from source)
 ├── Dockerfile                  # Build definition
-├── build-image.sh             # Build and tag helper script
-└── cleanup-docker-images.sh   # Cleanup old images
+└── scripts/
+    ├── build-image.sh         # Build and tag helper script
+    ├── cleanup-docker-images.sh   # Cleanup old images
+    └── fix_permissions.sh     # Fix Docker file permissions
 ```
 
 ## Configuration Files
@@ -87,7 +89,7 @@ Over time, you may accumulate old images with different names. Clean them up:
 
 ```bash
 # 1. Build the image
-./build-image.sh v1.0.0
+./scripts/build-image.sh v1.0.0
 
 # 2. Login to Docker Hub
 docker login
@@ -131,7 +133,7 @@ When using `docker-compose.dev.yml`:
 
 Files created as root? Run:
 ```bash
-./fix_permissions.sh
+./scripts/fix_permissions.sh
 ```
 
 Ensure `.env` has:
@@ -144,7 +146,7 @@ GROUP_ID=1000
 
 If you see weird image names like `tor-debugging-youtube-study-buddy`:
 ```bash
-./cleanup-docker-images.sh
+./scripts/cleanup-docker-images.sh
 docker-compose pull
 ```
 
@@ -156,7 +158,7 @@ docker-compose down -v
 docker system prune -a
 
 # Rebuild
-./build-image.sh
+./scripts/build-image.sh
 ```
 
 ## Container Names
@@ -170,7 +172,7 @@ docker system prune -a
 
 1. **Production Users**: Always use `docker-compose.yml` (pre-built image)
 2. **Developers**: Use `docker-compose.dev.yml` for local changes
-3. **After Code Changes**: Rebuild with `./build-image.sh`
+3. **After Code Changes**: Rebuild with `./scripts/build-image.sh`
 4. **Before Commits**: Test with production compose file
 5. **Version Tags**: Use semantic versioning (v1.0.0, v1.1.0, etc.)
 

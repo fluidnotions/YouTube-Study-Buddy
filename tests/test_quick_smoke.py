@@ -51,16 +51,21 @@ def test_video_id_extraction():
 
 @pytest.mark.unit
 def test_provider_factory():
-    """Test transcript provider factory."""
+    """Test transcript provider factory - only Tor provider works."""
     from yt_study_buddy.transcript_provider import create_transcript_provider
+    import pytest
 
-    api_provider = create_transcript_provider("api")
-    scraper_provider = create_transcript_provider("scraper")
+    # Tor provider should work
+    tor_provider = create_transcript_provider("tor")
+    assert tor_provider is not None
+    assert type(tor_provider).__name__ == "TorTranscriptProvider"
 
-    assert api_provider is not None
-    assert scraper_provider is not None
-    assert type(api_provider).__name__ == "APITranscriptProvider"
-    assert type(scraper_provider).__name__ == "ScraperTranscriptProvider"
+    # Other provider types should raise ValueError
+    with pytest.raises(ValueError, match="Only 'tor' provider is supported"):
+        create_transcript_provider("api")
+
+    with pytest.raises(ValueError, match="Only 'tor' provider is supported"):
+        create_transcript_provider("scraper")
 
 
 @pytest.mark.unit

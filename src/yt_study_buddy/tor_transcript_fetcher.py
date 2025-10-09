@@ -147,7 +147,15 @@ class TorTranscriptFetcher:
                 # Rotate circuit on retries (not on first attempt)
                 if attempt > 0:
                     print(f"Retry attempt {attempt + 1}/{max_retries}...")
-                    self.rotate_tor_circuit()
+
+                    # Try to rotate circuit, but don't fail if control port unavailable
+                    rotation_success = self.rotate_tor_circuit()
+
+                    # If circuit rotation failed, add extra delay to let rate limits expire
+                    if not rotation_success:
+                        extra_delay = 10 * attempt  # 10s, 20s, 30s, 40s...
+                        print(f"Circuit rotation unavailable, adding {extra_delay}s delay...")
+                        time.sleep(extra_delay)
 
                     # Exponential backoff with jitter
                     backoff = (2 ** attempt) + random.uniform(0, 1)
@@ -224,55 +232,26 @@ class TorTranscriptFetcher:
         languages: List[str] = ['en']
     ) -> Optional[Dict[str, Any]]:
         """
-        Try Tor first, fallback to direct connection if needed.
+        Fetch transcript using Tor proxy exclusively.
+
+        Note: The 'use_tor_first' parameter is kept for API compatibility but ignored.
+        Direct connections don't work due to YouTube IP blocking, so Tor is always used.
 
         Args:
             video_id: YouTube video ID
-            use_tor_first: Whether to try Tor proxy first (default: True)
+            use_tor_first: Ignored - Tor is always used (kept for compatibility)
             languages: List of language codes to try
 
         Returns:
-            Dictionary with transcript data or None if all methods failed
+            Dictionary with transcript data or None if fetch failed
         """
-        if use_tor_first:
-            print("Attempting with Tor proxy...")
-            result = self.fetch_transcript(video_id, languages)
-            if result:
-                print("✓ Successfully fetched via Tor")
-                return result
-            print("Tor fetch failed, trying direct connection...")
-
-        print("Attempting direct connection...")
-        try:
-            # Instantiate API and fetch transcript
-            api = YouTubeTranscriptApi()
-            fetched = api.fetch(video_id, languages=languages)
-            transcript_list = list(fetched)
-
-            # Process transcript
-            # FetchedTranscriptSnippet objects have .text attribute (not dict key)
-            transcript_text = ' '.join([snippet.text for snippet in transcript_list])
-            transcript_text = re.sub(r'\s+', ' ', transcript_text)
-            transcript_text = transcript_text.replace('[Music]', '').replace('[Applause]', '')
-
-            # Calculate duration
-            duration_info = None
-            if transcript_list:
-                last_snippet = transcript_list[-1]
-                duration_seconds = last_snippet.start + last_snippet.duration
-                duration_minutes = int(duration_seconds / 60)
-                duration_info = f"~{duration_minutes} minutes"
-
-            print("✓ Successfully fetched via direct connection")
-            return {
-                'transcript': transcript_text,
-                'duration': duration_info,
-                'length': len(transcript_text),
-                'segments': transcript_list
-            }
-
-        except Exception as e:
-            print(f"Direct connection also failed: {e}")
+        print("Fetching transcript via Tor proxy...")
+        result = self.fetch_transcript(video_id, languages)
+        if result:
+            print("✓ Successfully fetched via Tor")
+            return result
+        else:
+            print("✗ Failed to fetch transcript via Tor")
             return None
 
     def get_video_title(

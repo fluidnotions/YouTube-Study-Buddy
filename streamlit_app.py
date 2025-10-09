@@ -400,7 +400,7 @@ def main():
             process_button = st.button(
                 "🚀 Process Videos",
                 type="primary",
-                disabled=st.session_state.processing or not url_text.strip(),
+                disabled=st.session_state.processing,
                 use_container_width=True
             )
 

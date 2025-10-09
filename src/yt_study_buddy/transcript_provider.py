@@ -1,6 +1,8 @@
 """
 Transcript provider interface and implementations.
-Uses Tor proxy exclusively for reliable transcript fetching.
+
+Uses Tor proxy EXCLUSIVELY for transcript fetching.
+Direct connections DO NOT WORK due to YouTube IP blocking.
 """
 import random
 import re
@@ -58,7 +60,12 @@ class AbstractTranscriptProvider(ABC):
 
 
 class TorTranscriptProvider(AbstractTranscriptProvider):
-    """Tor proxy-based transcript provider - bypasses IP blocks via Tor network."""
+    """
+    Tor proxy-based transcript provider - bypasses IP blocks via Tor network.
+
+    This is the only working method for fetching YouTube transcripts since direct
+    connections are blocked by YouTube's IP-based blocking.
+    """
 
     def __init__(self, tor_host: str = '127.0.0.1', tor_port: int = 9050, use_tor_first: bool = True):
         """
@@ -67,7 +74,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
         Args:
             tor_host: Tor SOCKS proxy host (default: 127.0.0.1)
             tor_port: Tor SOCKS proxy port (default: 9050)
-            use_tor_first: Try Tor first, fallback to direct if it fails (default: True)
+            use_tor_first: Kept for API compatibility, always True (Tor is only working method)
         """
         self.tor_fetcher = TorTranscriptFetcher(tor_host=tor_host, tor_port=tor_port)
         self.use_tor_first = use_tor_first
@@ -86,12 +93,12 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             if self._tor_verified:
                 print("✓ Tor connection verified")
             else:
-                print("⚠ Tor connection not available, will use direct connection")
+                print("✗ Tor connection not available - cannot fetch transcripts (direct connection blocked by YouTube)")
         return self._tor_verified
 
     def get_transcript(self, video_id: str) -> Dict[str, Any]:
         """
-        Get transcript using Tor proxy with fallback to direct connection.
+        Get transcript using Tor proxy exclusively.
 
         Args:
             video_id: YouTube video ID
@@ -100,13 +107,13 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             Dictionary with transcript data
 
         Raises:
-            Exception: If all methods fail to fetch transcript
+            Exception: If Tor fetch fails to fetch transcript
         """
         try:
             # Add small random delay to avoid appearing automated
             time.sleep(random.uniform(0.5, 1.5))
 
-            # Fetch transcript with fallback logic
+            # Fetch transcript via Tor only
             result = self.tor_fetcher.fetch_with_fallback(
                 video_id=video_id,
                 use_tor_first=self.use_tor_first,
@@ -116,7 +123,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             if result:
                 return result
             else:
-                raise Exception("Both Tor and direct connection failed")
+                raise Exception("Tor fetch failed - direct connection not attempted (doesn't work with YouTube)")
 
         except Exception as e:
             # Check if it's a rate limiting error and retry
@@ -128,7 +135,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
 
     def get_video_title(self, video_id: str) -> str:
         """
-        Get video title using Tor proxy with fallback.
+        Get video title using Tor proxy exclusively.
 
         Args:
             video_id: YouTube video ID
@@ -137,25 +144,13 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             Video title cleaned for filename use
         """
         try:
-            # Try via Tor first if enabled
-            if self.use_tor_first and self.verify_tor_connection():
-                title = self.tor_fetcher.get_video_title(video_id)
-                if title and not title.startswith("Video_"):
-                    return title
-
-            # Fallback to direct connection
-            url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                title = data.get('title', f'Video_{video_id}')
-                # Clean title for filename
-                clean_title = re.sub(r'[<>:"/\\|?*]', '_', title)
-                clean_title = re.sub(r'\s+', ' ', clean_title).strip()
-                return clean_title[:100]
+            # Always use Tor for video title fetching
+            title = self.tor_fetcher.get_video_title(video_id)
+            if title and not title.startswith("Video_"):
+                return title
 
         except Exception as e:
-            print(f"Warning: Could not fetch video title: {e}")
+            print(f"Warning: Could not fetch video title via Tor: {e}")
 
         return f"Video_{video_id}"
 
@@ -205,14 +200,14 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
 def create_transcript_provider(provider_type: str = "tor", **kwargs) -> TranscriptProvider:
     """
     Factory function that returns a TranscriptProvider.
-    Now uses Tor exclusively for reliable transcript fetching.
+    Uses Tor EXCLUSIVELY - direct connections don't work due to YouTube IP blocking.
 
     Args:
-        provider_type: Type of provider (must be 'tor')
+        provider_type: Type of provider (must be 'tor', no other options work)
         **kwargs: Additional arguments passed to provider constructor
             - tor_host: Tor proxy host (default: '127.0.0.1')
             - tor_port: Tor proxy port (default: 9050)
-            - use_tor_first: Try Tor first, fallback to direct (default: True)
+            - use_tor_first: Kept for compatibility, always uses Tor
 
     Returns:
         TorTranscriptProvider instance
@@ -220,7 +215,7 @@ def create_transcript_provider(provider_type: str = "tor", **kwargs) -> Transcri
     if provider_type == "tor":
         return TorTranscriptProvider(**kwargs)
     else:
-        raise ValueError(f"Only 'tor' provider is supported. Got: {provider_type}")
+        raise ValueError(f"Only 'tor' provider is supported (direct connections don't work). Got: {provider_type}")
 
 
 # Type checking example

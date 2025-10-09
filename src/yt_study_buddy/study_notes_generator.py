@@ -58,7 +58,7 @@ class StudyNotesGenerator:
 
         try:
             prompt = self._build_prompt(transcript, related_notes)
-            model = os.getenv('GENERATE_NOTES_MODEL', 'claude-sonnet-4-5-2025092')
+            model = os.getenv('GENERATE_NOTES_MODEL', 'claude-sonnet-4-5-20250929')
             message = self.client.messages.create(
                 model=model,
                 max_tokens=4000,

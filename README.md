@@ -29,48 +29,57 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 
 ## 🚀 Quick Start
 
-```bash
-# 1. Get a free Claude API key from https://console.anthropic.com/
+### Prerequisites
+- Docker and Docker Compose installed
+- Claude API key ([Get free key](https://console.anthropic.com/))
 
-# 2. Run with Docker (simplest method)
-docker run -d \
-  --name youtube-study-buddy \
-  -p 8501:8501 \
-  -e CLAUDE_API_KEY=your_key_here \
-  -v ./notes:/app/notes \
-  fluidnotions/youtube-study-buddy:latest
-```
-
-Or use Docker Compose:
+### Installation
 
 ```bash
-# Create .env file with your API key
+# 1. Clone the repository
+git clone https://github.com/fluidnotions/YouTube-Study-Buddy.git
+cd YouTube-Study-Buddy
+
+# 2. Create .env file with your API key
 echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Run with Docker Compose
+# 3. Start both containers (Tor proxy + app)
 docker compose up -d
+
+# 4. Access the app at http://localhost:8501
 ```
 
-**That's it!** Open http://localhost:8501 in your browser.
-
-### CLI Usage (For Automation)
-
+**Manage containers**:
 ```bash
-# Install package
-uv sync
+# View logs
+docker logs -f youtube-study-buddy  # App logs
+docker logs -f tor-proxy            # Tor logs
 
-# Process URLs directly
-uv run youtube-study-buddy "https://youtube.com/watch?v=xyz"
+# Stop
+docker compose down
 
-# Process from file
-uv run youtube-study-buddy --file playlist-urls.txt
+# Restart
+docker compose restart
 
-# With subject organization
-uv run youtube-study-buddy --subject "Machine Learning" url1 url2
-
-# Full help
-uv run youtube-study-buddy --help
+# Rebuild and restart
+docker compose up -d --build
 ```
+
+### Architecture
+
+This project uses a **two-container architecture**:
+- **tor-proxy**: Dedicated Tor SOCKS proxy for bypassing YouTube rate limiting
+- **app**: Python application with Streamlit UI
+
+See [Why Separate Containers Work Better](docs/WHY_SEPARATE_CONTAINERS.md) for technical details.
+
+### Features
+
+- **Tor Integration**: Bypasses YouTube IP blocks via separate Tor container
+- **Circuit Rotation**: Automatically rotates Tor circuits on retry attempts
+- **Health Checks**: Built-in monitoring for both Tor and Streamlit
+- **Easy Debugging**: Clear separation between Tor and app logs
+- **Reliable**: Proven architecture using battle-tested `dperson/torproxy` image
 
 ## 🗺️ Using With Obsidian
 
@@ -116,13 +125,29 @@ Your notes automatically link together, building a knowledge graph you can visua
 
 ---
 
-## 🛠️ Alternative Ways to Run
+## 🛠️ Development & Advanced Usage
 
-Don't want to use Docker? See **[Alternative Setup Methods](docs/technical/alternative-setup.md)** for:
-- Running from source with Python/UV
-- CLI usage and command-line flags
-- Development setup for contributors
-- Manual installation instructions
+See the [docs](docs/) folder for:
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Detailed Docker usage
+- **[Build Instructions](docs/BUILD_INSTRUCTIONS.md)** - Building from source
+- **[Technical Setup](docs/technical/alternative-setup.md)** - Running without Docker
+- **[Solution Summary](docs/SOLUTION_SUMMARY.md)** - Architecture details
+
+### CLI Usage (Development)
+
+```bash
+# Install package locally
+uv sync
+
+# Process URLs directly
+uv run youtube-study-buddy "https://youtube.com/watch?v=xyz"
+
+# Process from file
+uv run youtube-study-buddy --file playlist-urls.txt
+
+# Full help
+uv run youtube-study-buddy --help
+```
 
 ---
 

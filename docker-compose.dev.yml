@@ -1,0 +1,49 @@
+version: '3.8'
+
+# Development docker-compose file that builds from source
+# Usage: docker-compose -f docker-compose.dev.yml up --build
+
+services:
+  youtube-study-buddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - fluidnotions/youtube-study-buddy:latest
+        - fluidnotions/youtube-study-buddy:dev
+    container_name: youtube-study-buddy-dev
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - TOR_HOST=tor-proxy
+      - TOR_PORT=9050
+    volumes:
+      - ./notes:/app/notes
+      - ./src:/app/src  # Mount source for live development
+      - ./streamlit_app.py:/app/streamlit_app.py  # Mount streamlit app
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    depends_on:
+      tor-proxy:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tor-proxy:
+    image: dperson/torproxy:latest
+    container_name: ytstudybuddy-tor-proxy-dev
+    restart: unless-stopped
+    environment:
+      - LOCATION=US
+    volumes:
+      - tor-data-dev:/var/lib/tor
+    healthcheck:
+      test: ["CMD", "curl", "-x", "socks5://localhost:9050", "https://check.torproject.org", "-s", "-o", "/dev/null", "-w", "%{http_code}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  tor-data-dev:
+    driver: local

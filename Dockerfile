@@ -1,6 +1,13 @@
 # YouTube Study Buddy - App only (connects to external Tor proxy)
 FROM python:3.13-slim
 
+# Metadata
+LABEL org.opencontainers.image.title="YouTube Study Buddy"
+LABEL org.opencontainers.image.description="Transform YouTube videos into AI-powered study notes with Obsidian links"
+LABEL org.opencontainers.image.authors="fluidnotions"
+LABEL org.opencontainers.image.source="https://github.com/fluidnotions/YouTube-Study-Buddy"
+LABEL org.opencontainers.image.version="latest"
+
 WORKDIR /app
 
 # Install system dependencies

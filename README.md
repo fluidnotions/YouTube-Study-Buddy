@@ -42,12 +42,17 @@ cd YouTube-Study-Buddy
 
 # 2. Create .env file with your API key
 echo "CLAUDE_API_KEY=your_key_here" > .env
+echo "USER_ID=$(id -u)" >> .env
+echo "GROUP_ID=$(id -g)" >> .env
 
-# 3. Start both containers (Tor proxy + app)
-docker compose up -d
+# 3. Pull and start the pre-built image (recommended)
+docker-compose pull
+docker-compose up -d
 
 # 4. Access the app at http://localhost:8501
 ```
+
+**For development:** See [DOCKER.md](DOCKER.md) for building from source and development workflow.
 
 **Manage containers**:
 ```bash

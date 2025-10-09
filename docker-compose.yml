@@ -2,10 +2,8 @@ version: '3.8'
 
 services:
   youtube-study-buddy:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: youtube-study-buddy-separate-tor
+    image: fluidnotions/youtube-study-buddy:latest
+    container_name: youtube-study-buddy
     ports:
       - "8501:8501"
     env_file:

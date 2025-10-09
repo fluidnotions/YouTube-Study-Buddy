@@ -14,6 +14,8 @@ from stem import Signal, SocketError
 from stem.control import Controller
 from youtube_transcript_api import YouTubeTranscriptApi
 
+from .ytdlp_fallback import YtDlpFallback
+
 
 class TorTranscriptFetcher:
     """Fetch YouTube transcripts through Tor proxy to avoid IP blocks."""
@@ -43,6 +45,7 @@ class TorTranscriptFetcher:
         self.tor_port = tor_port
         self.tor_control_port = tor_control_port
         self.tor_control_password = tor_control_password
+        self.ytdlp_fallback = YtDlpFallback()
 
     def rotate_tor_circuit(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
@@ -232,27 +235,38 @@ class TorTranscriptFetcher:
         languages: List[str] = ['en']
     ) -> Optional[Dict[str, Any]]:
         """
-        Fetch transcript using Tor proxy exclusively.
-
-        Note: The 'use_tor_first' parameter is kept for API compatibility but ignored.
-        Direct connections don't work due to YouTube IP blocking, so Tor is always used.
+        Fetch transcript using Tor first, fall back to yt-dlp if Tor fails.
 
         Args:
             video_id: YouTube video ID
-            use_tor_first: Ignored - Tor is always used (kept for compatibility)
-            languages: List of language codes to try
+            use_tor_first: Always True (Tor is primary method)
+            languages: List of language codes
 
         Returns:
-            Dictionary with transcript data or None if fetch failed
+            Dictionary with transcript data or None if all methods failed
         """
+        # Try Tor first (primary method)
         print("Fetching transcript via Tor proxy...")
         result = self.fetch_transcript(video_id, languages)
+
         if result:
             print("✓ Successfully fetched via Tor")
             return result
         else:
-            print("✗ Failed to fetch transcript via Tor")
-            return None
+            print("✗ Tor fetch failed")
+
+            # Fall back to yt-dlp
+            print("Attempting yt-dlp fallback...")
+            ytdlp_result = self.ytdlp_fallback.fetch_transcript(
+                video_id, languages
+            )
+
+            if ytdlp_result:
+                print("✓ Successfully fetched via yt-dlp fallback")
+                return ytdlp_result
+            else:
+                print("✗ YT-DLP fallback also failed")
+                return None
 
     def get_video_title(
         self,

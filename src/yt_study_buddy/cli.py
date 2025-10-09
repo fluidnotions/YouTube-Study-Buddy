@@ -214,6 +214,10 @@ class YouTubeStudyNotes:
             print(f"Subjects: {stats['subject_count']} ({', '.join(stats['subjects'])})")
         print("="*50)
 
+        # Show statistics at the end
+        if hasattr(self.video_processor.provider, 'print_stats'):
+            self.video_processor.provider.print_stats()
+
 
 def show_help():
     """Display help information."""

@@ -69,16 +69,23 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
 
     def __init__(self, tor_host: str = '127.0.0.1', tor_port: int = 9050, use_tor_first: bool = True):
         """
-        Initialize Tor-based transcript provider.
+        Initialize Tor-based transcript provider with yt-dlp fallback.
 
         Args:
             tor_host: Tor SOCKS proxy host (default: 127.0.0.1)
             tor_port: Tor SOCKS proxy port (default: 9050)
-            use_tor_first: Kept for API compatibility, always True (Tor is only working method)
+            use_tor_first: Always True (Tor is primary, yt-dlp is fallback)
         """
         self.tor_fetcher = TorTranscriptFetcher(tor_host=tor_host, tor_port=tor_port)
         self.use_tor_first = use_tor_first
         self._tor_verified = False
+        self.stats = {
+            'tor_success': 0,
+            'tor_failure': 0,
+            'ytdlp_success': 0,
+            'ytdlp_failure': 0,
+            'total_attempts': 0
+        }
 
     def verify_tor_connection(self) -> bool:
         """
@@ -98,7 +105,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
 
     def get_transcript(self, video_id: str) -> Dict[str, Any]:
         """
-        Get transcript using Tor proxy exclusively.
+        Get transcript with statistics tracking.
 
         Args:
             video_id: YouTube video ID
@@ -107,13 +114,15 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             Dictionary with transcript data
 
         Raises:
-            Exception: If Tor fetch fails to fetch transcript
+            Exception: If both Tor and yt-dlp fallback fail
         """
+        self.stats['total_attempts'] += 1
+
         try:
             # Add small random delay to avoid appearing automated
             time.sleep(random.uniform(0.5, 1.5))
 
-            # Fetch transcript via Tor only
+            # Fetch transcript via Tor with yt-dlp fallback
             result = self.tor_fetcher.fetch_with_fallback(
                 video_id=video_id,
                 use_tor_first=self.use_tor_first,
@@ -121,9 +130,16 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             )
 
             if result:
+                # Check which method was used
+                if result.get('method') == 'yt-dlp':
+                    self.stats['ytdlp_success'] += 1
+                else:
+                    self.stats['tor_success'] += 1
                 return result
             else:
-                raise Exception("Tor fetch failed - direct connection not attempted (doesn't work with YouTube)")
+                self.stats['tor_failure'] += 1
+                self.stats['ytdlp_failure'] += 1
+                raise Exception("Both Tor and yt-dlp fallback failed")
 
         except Exception as e:
             # Check if it's a rate limiting error and retry
@@ -194,6 +210,22 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
                     print(f"    Retry {attempt + 1} failed: {retry_e}")
 
         raise Exception("All retry attempts exhausted")
+
+    def print_stats(self):
+        """Print success rate statistics."""
+        total = self.stats['total_attempts']
+        if total == 0:
+            print("No attempts yet")
+            return
+
+        print("\n" + "="*50)
+        print("TRANSCRIPT FETCHING STATISTICS")
+        print("="*50)
+        print(f"Total attempts: {total}")
+        print(f"Tor successes: {self.stats['tor_success']} ({self.stats['tor_success']/total*100:.1f}%)")
+        print(f"YT-DLP successes: {self.stats['ytdlp_success']} ({self.stats['ytdlp_success']/total*100:.1f}%)")
+        print(f"Total failures: {self.stats['tor_failure']} ({self.stats['tor_failure']/total*100:.1f}%)")
+        print("="*50)
 
 
 # Factory function for creating providers

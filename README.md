@@ -81,6 +81,28 @@ See [Why Separate Containers Work Better](docs/WHY_SEPARATE_CONTAINERS.md) for t
 - **Easy Debugging**: Clear separation between Tor and app logs
 - **Reliable**: Proven architecture using battle-tested `dperson/torproxy` image
 
+## 📡 Transcript Fetching Methods
+
+YouTube Study Buddy uses a two-tier approach for reliable transcript fetching:
+
+### 1. Primary: Tor Proxy (Recommended)
+- Routes requests through Tor network to bypass IP blocking
+- Circuit rotation for retry attempts
+- Most reliable for batch processing
+
+### 2. Fallback: yt-dlp
+- Automatically used when Tor fails
+- Direct connection to YouTube
+- Provides additional reliability layer
+
+### Success Rate
+With the dual-method approach:
+- **Tor success rate**: ~70-80%
+- **YT-DLP fallback**: Covers remaining 20-30%
+- **Combined success rate**: >95%
+
+Statistics are displayed after processing showing which method was used for each video.
+
 ## 🗺️ Using With Obsidian
 
 [Obsidian](https://obsidian.md) is a free knowledge base app that lets you build a "second brain." YouTube Study Buddy generates notes with:

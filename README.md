@@ -30,38 +30,56 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Docker installed
+- Docker and Docker Compose installed
 - Claude API key ([Get free key](https://console.anthropic.com/))
 
-### Run with Docker Compose (Recommended)
+### Installation
 
 ```bash
-# Create .env file with your API key
+# 1. Clone the repository
+git clone https://github.com/fluidnotions/YouTube-Study-Buddy.git
+cd YouTube-Study-Buddy
+
+# 2. Create .env file with your API key
 echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Start both containers (Tor proxy + app)
+# 3. Start both containers (Tor proxy + app)
 docker compose up -d
 
-# Access the app at http://localhost:8501
+# 4. Access the app at http://localhost:8501
 ```
 
-**View logs**:
+**Manage containers**:
 ```bash
+# View logs
 docker logs -f youtube-study-buddy  # App logs
 docker logs -f tor-proxy            # Tor logs
+
+# Stop
+docker compose down
+
+# Restart
+docker compose restart
+
+# Rebuild and restart
+docker compose up -d --build
 ```
 
-**Stop containers**:
-```bash
-docker compose down
-```
+### Architecture
+
+This project uses a **two-container architecture**:
+- **tor-proxy**: Dedicated Tor SOCKS proxy for bypassing YouTube rate limiting
+- **app**: Python application with Streamlit UI
+
+See [Why Separate Containers Work Better](docs/WHY_SEPARATE_CONTAINERS.md) for technical details.
 
 ### Features
 
-- **Separate Tor Proxy**: Dedicated Tor container for reliability (see [why separate containers work better](docs/WHY_SEPARATE_CONTAINERS.md))
+- **Tor Integration**: Bypasses YouTube IP blocks via separate Tor container
 - **Circuit Rotation**: Automatically rotates Tor circuits on retry attempts
 - **Health Checks**: Built-in monitoring for both Tor and Streamlit
 - **Easy Debugging**: Clear separation between Tor and app logs
+- **Reliable**: Proven architecture using battle-tested `dperson/torproxy` image
 
 ## 🗺️ Using With Obsidian
 

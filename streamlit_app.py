@@ -34,14 +34,16 @@ def initialize_session_state():
         st.session_state.show_quick_start = True
 
 
-def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="notes"):
+def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="notes", parallel=False, max_workers=3):
     """Create or update the YouTube processor based on settings."""
     return YouTubeStudyNotes(
         subject=subject if subject else None,
         global_context=global_context,
         base_dir=base_dir,
         generate_assessments=generate_assessments,
-        auto_categorize=auto_categorize
+        auto_categorize=auto_categorize,
+        parallel=parallel,
+        max_workers=max_workers
     )
 
 
@@ -336,6 +338,29 @@ def main():
                     disabled=st.session_state.processing
                 )
 
+        # Parallel processing settings
+        st.subheader("⚡ Performance Settings")
+        col1, col2 = st.columns(2)
+        with col1:
+            use_parallel = st.checkbox(
+                "🚀 Parallel Processing",
+                value=True,
+                help="Process multiple videos simultaneously for faster batch operations",
+                disabled=st.session_state.processing
+            )
+        with col2:
+            if use_parallel:
+                max_workers = st.slider(
+                    "Workers",
+                    min_value=1,
+                    max_value=5,
+                    value=3,
+                    help="Number of concurrent processing tasks. More workers = faster but higher rate limit risk",
+                    disabled=st.session_state.processing
+                )
+            else:
+                max_workers = 1
+
         st.divider()
 
         # Playlist Extraction Section
@@ -438,7 +463,9 @@ def main():
                         global_context,
                         generate_assessments,
                         auto_categorize and not subject,
-                        base_dir=output_base_dir
+                        base_dir=output_base_dir,
+                        parallel=use_parallel,
+                        max_workers=max_workers
                     )
 
                     # Switch to Results tab by rerunning with active tab
@@ -449,23 +476,46 @@ def main():
                     status_container = st.container()
 
                     with status_container:
-                        st.info(f"🎬 Processing {len(valid_urls)} video{'s' if len(valid_urls) != 1 else ''}...")
+                        mode_text = f"parallel with {max_workers} workers" if use_parallel else "sequentially"
+                        st.info(f"🎬 Processing {len(valid_urls)} video{'s' if len(valid_urls) != 1 else ''} {mode_text}...")
 
                     overall_progress = st.progress(0)
                     overall_status = st.empty()
 
-                    successful = 0
-                    for i, url in enumerate(valid_urls):
-                        overall_status.text(f"Processing {i+1}/{len(valid_urls)}: {url[:60]}...")
+                    if use_parallel:
+                        # Parallel processing using the CLI's built-in method
+                        results = []
+                        completed = [0]  # Use list to allow modification in callback
 
-                        if i > 0:  # Add delay between requests
-                            time.sleep(3)
+                        def progress_callback(status, completed_count, total):
+                            """Update Streamlit progress."""
+                            completed[0] = completed_count
+                            overall_progress.progress(completed_count / total)
+                            overall_status.text(f"Processing: {completed_count}/{total} videos ({status})")
 
-                        result = process_single_video(url, processor, progress_container)
-                        if result:
-                            successful += 1
+                        # Set progress callback
+                        if hasattr(processor, 'parallel_processor'):
+                            processor.parallel_processor.progress_callback = progress_callback
 
-                        overall_progress.progress((i + 1) / len(valid_urls))
+                        # Use the process_urls method which handles parallel internally
+                        processor.process_urls(valid_urls)
+
+                        # Count successful from metrics
+                        successful = processor.metrics.successful if hasattr(processor, 'metrics') else len(valid_urls)
+                    else:
+                        # Sequential processing
+                        successful = 0
+                        for i, url in enumerate(valid_urls):
+                            overall_status.text(f"Processing {i+1}/{len(valid_urls)}: {url[:60]}...")
+
+                            if i > 0:  # Add delay between requests
+                                time.sleep(3)
+
+                            result = process_single_video(url, processor, progress_container)
+                            if result:
+                                successful += 1
+
+                            overall_progress.progress((i + 1) / len(valid_urls))
 
                     # Reset processing flag
                     st.session_state.processing = False

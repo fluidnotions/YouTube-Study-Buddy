@@ -1,63 +1,51 @@
-# Build Instructions - Single Container with Tor
+# Build Instructions - Separate Container Architecture
 
 ## Overview
 
-YouTube Study Buddy runs as a **single-container deployment** with integrated Tor proxy:
+YouTube Study Buddy uses a **two-container deployment** for reliability:
 
-- Python 3.13 slim base (Debian-based)
-- Tor from Debian package repository
-- Circuit rotation via Tor control port (9051)
-- Single container simplicity
-- Health checks for both Tor and Streamlit
+1. **tor-proxy**: Dedicated Tor SOCKS proxy (`dperson/torproxy:latest`)
+2. **app**: Python 3.13 app with Streamlit UI
 
-## Build Options
+**Why separate containers?** See [Why Separate Containers Work Better](WHY_SEPARATE_CONTAINERS.md)
 
-### Option 1: Python + Tor Single Container (Recommended)
+## Build and Run (Recommended)
+
+### Using Docker Compose
 
 ```bash
-# Build the image
-docker build -f Dockerfile.python-tor -t youtube-study-buddy:python-tor .
+# Create .env file
+echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Run with docker-compose
-docker compose -f docker-compose-python-tor.yml up -d
+# Build and start both containers
+docker compose up -d --build
 
-# Or run directly
-docker run -d \
-  --name youtube-study-buddy-python-tor \
-  -p 8501:8501 \
-  -v $(pwd)/notes:/app/notes \
-  --env-file .env \
-  youtube-study-buddy:python-tor
+# View logs
+docker logs -f youtube-study-buddy  # App
+docker logs -f tor-proxy            # Tor
+
+# Stop
+docker compose down
 ```
 
 **Features:**
-- Python 3.13 base (familiar, well-documented)
-- Debian's Tor package (stable and maintained)
+- Separate Tor container for reliability
+- Easy debugging with separate logs
+- Independent lifecycle management
+- Proven `dperson/torproxy` image
 - Circuit rotation enabled
-- Single container deployment
-- Built-in health checks
 
-### Option 2: Legacy Dockerfile (Without Tor)
+### Manual Build and Run
 
 ```bash
-# Build the image
+# Build app image
 docker build -t youtube-study-buddy:latest .
 
-# Run with docker-compose
+# Run with docker compose
 docker compose up -d
-
-# Or run directly
-docker run -d \
-  --name youtube-study-buddy \
-  -p 8501:8501 \
-  -v $(pwd)/notes:/app/notes \
-  --env-file .env \
-  youtube-study-buddy:latest
 ```
 
-**Note:** This option requires external Tor proxy (not included in container).
-
-### Option 3: Development Mode
+### Development Mode (No Docker)
 
 ```bash
 # Run locally without Docker

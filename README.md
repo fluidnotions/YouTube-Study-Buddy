@@ -33,51 +33,35 @@ Traditional note-taking creates the "illusion of competence" – you transcribe 
 - Docker installed
 - Claude API key ([Get free key](https://console.anthropic.com/))
 
-### Run with Docker
-
-```bash
-# Build the image
-docker build -t youtube-study-buddy .
-
-# Run the container
-docker run -d \
-  --name youtube-study-buddy \
-  -p 8501:8501 \
-  -e CLAUDE_API_KEY=your_key_here \
-  -v $(pwd)/notes:/app/notes \
-  youtube-study-buddy
-```
-
-Or use the convenience script:
+### Run with Docker Compose (Recommended)
 
 ```bash
 # Create .env file with your API key
 echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Run
-./run-docker.sh
-```
-
-Or use Docker Compose:
-
-```bash
-# Create .env file
-echo "CLAUDE_API_KEY=your_key_here" > .env
-
-# Run
+# Start both containers (Tor proxy + app)
 docker compose up -d
+
+# Access the app at http://localhost:8501
 ```
 
-**Access the app**: http://localhost:8501
+**View logs**:
+```bash
+docker logs -f youtube-study-buddy  # App logs
+docker logs -f tor-proxy            # Tor logs
+```
 
-**View logs**: `docker logs -f youtube-study-buddy`
+**Stop containers**:
+```bash
+docker compose down
+```
 
 ### Features
 
-- **Tor Integration**: Includes Tor proxy to handle YouTube rate limiting
+- **Separate Tor Proxy**: Dedicated Tor container for reliability (see [why separate containers work better](docs/WHY_SEPARATE_CONTAINERS.md))
 - **Circuit Rotation**: Automatically rotates Tor circuits on retry attempts
-- **Single Container**: Everything runs in one Docker container for simplicity
 - **Health Checks**: Built-in monitoring for both Tor and Streamlit
+- **Easy Debugging**: Clear separation between Tor and app logs
 
 ## 🗺️ Using With Obsidian
 

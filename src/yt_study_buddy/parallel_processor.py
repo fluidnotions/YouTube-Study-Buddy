@@ -46,14 +46,18 @@ class ParallelVideoProcessor:
     def process_videos_parallel(
         self,
         urls: List[str],
-        process_func: Callable[[str], ProcessingResult]
+        process_func: Callable[[str], ProcessingResult],
+        worker_factory: Optional[Callable[[], Any]] = None
     ) -> List[ProcessingResult]:
         """
-        Process multiple videos in parallel.
+        Process multiple videos in parallel with optional per-worker instances.
 
         Args:
             urls: List of YouTube URLs to process
             process_func: Function that processes a single URL and returns ProcessingResult
+                         Should accept (url, worker_instance) if worker_factory is provided
+            worker_factory: Optional factory function to create per-worker instances
+                          (e.g., VideoProcessor instances for independent Tor connections)
 
         Returns:
             List of ProcessingResult objects
@@ -63,11 +67,23 @@ class ParallelVideoProcessor:
 
         print(f"\n{'='*50}")
         print(f"PARALLEL PROCESSING: {len(urls)} videos with {self.max_workers} workers")
+        if worker_factory:
+            print(f"Per-worker instances: ENABLED (independent Tor connections)")
+        else:
+            print(f"Per-worker instances: DISABLED (shared connections)")
         print(f"{'='*50}\n")
 
         results = []
         completed_count = 0
         start_time = time.time()
+
+        # Create wrapper function that creates per-worker instance if needed
+        def worker_wrapper(url: str) -> ProcessingResult:
+            if worker_factory:
+                worker_instance = worker_factory()
+                return process_func(url, worker_instance)
+            else:
+                return process_func(url)
 
         # Use ThreadPoolExecutor for I/O-bound tasks
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -78,7 +94,7 @@ class ParallelVideoProcessor:
                 if i > 0 and self.rate_limit_delay > 0:
                     time.sleep(self.rate_limit_delay)
 
-                future = executor.submit(process_func, url)
+                future = executor.submit(worker_wrapper, url)
                 future_to_url[future] = url
 
             # Collect results as they complete

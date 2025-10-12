@@ -70,6 +70,12 @@ DEBUG_PARALLEL=false
 DEBUG_MAX_WORKERS=3
 ```
 
+**Per-Worker Tor Connections**: When parallel processing is enabled, each worker gets its own VideoProcessor instance with an independent Tor connection. This provides:
+- Different Tor exit nodes per worker
+- Better connection isolation
+- Improved reliability
+- Reduced rate limiting risk
+
 Performance comparison:
 - Sequential: ~60s per video
 - Parallel (3 workers): ~25s per video (2.5x faster)

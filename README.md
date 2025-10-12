@@ -215,13 +215,25 @@ The web interface automatically supports parallel processing:
 3. Adjust worker count (1-5, default: 3)
 4. Process your videos with 2-3x speedup
 
+### Per-Worker Tor Connections
+
+**NEW:** Each parallel worker now gets its own independent Tor connection! This provides:
+
+- **Different Exit Nodes**: Each worker likely uses a different Tor exit node
+- **Better Isolation**: Connection failures in one worker don't affect others
+- **Improved Reliability**: No contention for shared Tor circuit
+- **Rate Limit Protection**: Different exit IPs reduce YouTube rate limiting risk
+
+This is automatically enabled for all parallel processing (CLI, Streamlit, and debug mode).
+
 ### Considerations
 
-- **Rate Limiting**: More workers = higher risk of YouTube rate limits
+- **Rate Limiting**: More workers = more concurrent requests, but per-worker Tor connections help
 - **Recommended**: 3-5 workers for optimal balance
-- **Memory**: Each worker holds video data simultaneously
-- **API Limits**: Claude API rate limits apply
+- **Memory**: Each worker has its own VideoProcessor instance (increased memory usage)
+- **API Limits**: Claude API rate limits still apply
 - **Thread Safety**: File operations and knowledge graph updates are thread-safe
+- **Tor Circuits**: Each worker establishes its own Tor circuit through the shared proxy
 
 ---
 

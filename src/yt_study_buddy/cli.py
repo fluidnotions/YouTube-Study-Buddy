@@ -76,12 +76,22 @@ class YouTubeStudyNotes:
 
         return urls
 
-    def process_single_url(self, url):
-        """Process a single YouTube URL and generate study notes."""
+    def process_single_url(self, url, worker_processor=None):
+        """
+        Process a single YouTube URL and generate study notes.
+
+        Args:
+            url: YouTube URL to process
+            worker_processor: Optional VideoProcessor instance for this worker.
+                            If None, uses self.video_processor (shared instance).
+        """
         start_time = time.time()
 
+        # Use per-worker processor if provided, otherwise use shared instance
+        processor = worker_processor if worker_processor else self.video_processor
+
         # Extract video ID
-        video_id = self.video_processor.get_video_id(url)
+        video_id = processor.get_video_id(url)
         if not video_id:
             print(f"ERROR: Invalid YouTube URL: {url}")
             return ProcessingResult(
@@ -99,7 +109,7 @@ class YouTubeStudyNotes:
         try:
             # Get transcript
             print("Fetching transcript from YouTube via Tor...")
-            transcript_data = self.video_processor.get_transcript(video_id)
+            transcript_data = processor.get_transcript(video_id)
             transcript = transcript_data['transcript']
             method = transcript_data.get('method', 'tor')
 
@@ -109,7 +119,7 @@ class YouTubeStudyNotes:
 
             # Get video title
             print("Fetching video title...")
-            video_title = self.video_processor.get_video_title(video_id)
+            video_title = processor.get_video_title(video_id)
 
             # Auto-categorize if no subject provided
             if self.auto_categorizer and not self.subject:
@@ -139,7 +149,7 @@ class YouTubeStudyNotes:
             )
 
             # Save to file using the notes generator's method
-            sanitized_title = self.video_processor.sanitize_filename(video_title)
+            sanitized_title = processor.sanitize_filename(video_title)
             filename = f"{sanitized_title}.md"
             filepath = os.path.join(self.output_dir, filename)
 
@@ -234,10 +244,16 @@ class YouTubeStudyNotes:
             print(f"Cross-reference scope: {'Subject-only' if not self.global_context else 'Global'}")
 
         if self.parallel:
-            # Parallel processing
+            # Parallel processing with per-worker VideoProcessor instances
+            # Factory function creates independent VideoProcessor for each worker
+            def video_processor_factory():
+                """Create a new VideoProcessor instance for a worker thread."""
+                return VideoProcessor("tor")
+
             results = self.parallel_processor.process_videos_parallel(
                 urls,
-                self.process_single_url
+                self.process_single_url,
+                worker_factory=video_processor_factory
             )
 
             # Collect metrics

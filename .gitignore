@@ -36,3 +36,6 @@ dist-electron/
 *.exe
 *.msi
 /debug_logs/
+
+# RAG Feature Workspaces
+workspaces/

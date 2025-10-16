@@ -8,7 +8,7 @@ incremental indexing and avoid redundant work.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -275,3 +275,32 @@ class IndexTracker:
         self._index = {}
         self._save_index()
         logger.info("Cleared all index entries")
+
+    def get_all_video_ids(self) -> List[str]:
+        """Get all indexed video IDs.
+
+        Returns:
+            List of video IDs
+        """
+        return list(self._index.keys())
+
+    def export_data(self) -> Dict[str, Any]:
+        """Export index tracker data.
+
+        Returns:
+            Dictionary with index data
+        """
+        return {
+            'index': self._index.copy(),
+            'count': len(self._index)
+        }
+
+    def import_data(self, data: Dict[str, Any]) -> None:
+        """Import index tracker data.
+
+        Args:
+            data: Dictionary with index data (from export_data)
+        """
+        self._index = data.get('index', {})
+        self._save_index()
+        logger.info(f"Imported {len(self._index)} index entries")

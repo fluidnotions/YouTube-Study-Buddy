@@ -283,7 +283,7 @@ If you have existing notes from before RAG:
 
 2. **Run migration script:**
    ```bash
-   docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py
+   docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes
    ```
 
 3. **Verify indexing:**
@@ -292,6 +292,91 @@ If you have existing notes from before RAG:
    ```
 
 See `scripts/migrate_notes_to_rag.py --help` for options.
+
+### Migration Script Options
+
+```bash
+# Dry run (preview what will be indexed)
+docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --dry-run
+
+# Index specific subject only
+docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --subject AI
+
+# Resume from checkpoint (if interrupted)
+docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --resume
+
+# Batch size (default: 10)
+docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --batch-size 20
+```
+
+## RAG Management & Evaluation
+
+### Interactive Query Tool
+
+Test RAG queries interactively with the REPL tool:
+
+```bash
+docker exec -it youtube-study-buddy python scripts/query_rag_interactive.py --notes-dir /app/notes
+```
+
+Commands available in the REPL:
+- Basic query: `How do neural networks learn?`
+- Subject filter: `subject:AI backpropagation`
+- Global search: `global gradient descent`
+- Show stats: `stats`
+- Export results: `export results.json`
+- Help: `help`
+- Quit: `quit`
+
+### Evaluate RAG Quality
+
+Compare RAG semantic search against fuzzy matching:
+
+```bash
+# Quick evaluation (10 test queries)
+docker exec youtube-study-buddy python scripts/evaluate_rag.py --notes-dir /app/notes --quick
+
+# Full evaluation with comparison (50 queries)
+docker exec youtube-study-buddy python scripts/evaluate_rag.py --notes-dir /app/notes --compare
+
+# Save detailed report
+docker exec youtube-study-buddy python scripts/evaluate_rag.py --notes-dir /app/notes --report-file /app/evaluation.json
+docker cp youtube-study-buddy:/app/evaluation.json ./evaluation.json
+```
+
+Metrics reported:
+- Precision@1, @5, @10 (how relevant are the top results)
+- Query latency (p50, p95, p99)
+- Average similarity scores
+- RAG vs fuzzy improvement comparison
+
+### Vector Store Maintenance
+
+Perform maintenance operations on the RAG vector store:
+
+```bash
+# Show collection statistics
+docker exec youtube-study-buddy python scripts/maintain_vector_store.py --stats
+
+# Run health diagnostics
+docker exec youtube-study-buddy python scripts/maintain_vector_store.py --diagnose
+
+# Clean stale entries (deleted notes)
+docker exec youtube-study-buddy python scripts/maintain_vector_store.py --clean --notes-dir /app/notes
+
+# Export for backup
+docker exec youtube-study-buddy python scripts/maintain_vector_store.py --export /app/backup.json
+docker cp youtube-study-buddy:/app/backup.json ./backup.json
+
+# Import from backup
+docker cp ./backup.json youtube-study-buddy:/app/backup.json
+docker exec youtube-study-buddy python scripts/maintain_vector_store.py --import /app/backup.json
+
+# Rebuild from scratch (requires confirmation)
+docker exec -it youtube-study-buddy python scripts/maintain_vector_store.py --rebuild --notes-dir /app/notes
+```
+
+See [scripts/README.md](scripts/README.md) for detailed documentation of all scripts.
 
 ## Worktree Information
 

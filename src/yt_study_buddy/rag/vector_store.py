@@ -428,25 +428,104 @@ class VectorStore:
     
     def reset_collection(self) -> bool:
         """Delete and recreate the collection (use with caution).
-        
+
         Returns:
             True if successful, False otherwise
         """
         try:
             logger.warning(f"Resetting collection: {self.collection_name}")
-            
+
             # Delete collection
             self.client.delete_collection(name=self.collection_name)
-            
+
             # Reset cached collection
             self._collection = None
-            
+
             # Recreate collection
             _ = self.collection
-            
+
             logger.info("Collection reset successfully")
             return True
-        
+
         except Exception as e:
             logger.error(f"Failed to reset collection: {e}")
             return False
+
+    def clear_collection(self) -> bool:
+        """Clear all data from the collection.
+
+        Alias for reset_collection() for backwards compatibility.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.reset_collection()
+
+    def export_collection(self) -> Dict[str, Any]:
+        """Export all collection data.
+
+        Returns:
+            Dictionary with collection data
+        """
+        try:
+            # Get all data from collection
+            results = self.collection.get(
+                include=['embeddings', 'documents', 'metadatas']
+            )
+
+            return {
+                'ids': results.get('ids', []),
+                'documents': results.get('documents', []),
+                'embeddings': results.get('embeddings', []),
+                'metadatas': results.get('metadatas', []),
+                'chunks': len(results.get('ids', []))
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to export collection: {e}")
+            return {'chunks': 0}
+
+    def import_collection(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Import data into collection.
+
+        Args:
+            data: Dictionary with collection data (from export_collection)
+
+        Returns:
+            Import statistics
+        """
+        try:
+            ids = data.get('ids', [])
+            documents = data.get('documents', [])
+            embeddings = data.get('embeddings', [])
+            metadatas = data.get('metadatas', [])
+
+            if not ids:
+                return {'chunks_imported': 0, 'error': 'No data to import'}
+
+            # Clear existing data
+            self.reset_collection()
+
+            # Import in batches
+            batch_size = 100
+            total = len(ids)
+
+            for i in range(0, total, batch_size):
+                batch_ids = ids[i:i + batch_size]
+                batch_docs = documents[i:i + batch_size]
+                batch_embeddings = embeddings[i:i + batch_size]
+                batch_metas = metadatas[i:i + batch_size]
+
+                self.collection.add(
+                    ids=batch_ids,
+                    documents=batch_docs,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metas
+                )
+
+            logger.info(f"Imported {total} chunks")
+            return {'chunks_imported': total}
+
+        except Exception as e:
+            logger.error(f"Failed to import collection: {e}")
+            return {'chunks_imported': 0, 'error': str(e)}

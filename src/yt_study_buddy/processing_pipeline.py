@@ -313,6 +313,72 @@ def process_obsidian_links(
         return job
 
 
+def index_rag_embeddings(
+    job: VideoProcessingJob,
+    rag_pipeline_stage
+) -> VideoProcessingJob:
+    """
+    Index note embeddings into RAG vector store.
+
+    Stateless: Only adds embeddings to vector store.
+    Resumable: Skips if already indexed and not modified.
+    Optional: Gracefully handles RAG being disabled or unavailable.
+
+    Args:
+        job: VideoProcessingJob to process
+        rag_pipeline_stage: RAGPipelineStage instance (optional)
+
+    Returns:
+        Same job object (unchanged)
+    """
+    # Skip if RAG not enabled or not provided
+    if not rag_pipeline_stage:
+        return job
+
+    if not job.has_files_written():
+        print(f"  [Job {job.video_id}] Files not written yet, skipping RAG indexing")
+        return job
+
+    try:
+        # Check if RAG pipeline is ready
+        if not rag_pipeline_stage.is_ready():
+            print(f"  [Job {job.video_id}] RAG pipeline not ready, skipping indexing")
+            return job
+
+        print(f"  [Job {job.video_id}] Indexing embeddings...")
+        stage_start = time.time()
+
+        # Prepare metadata
+        video_metadata = {
+            'video_id': job.video_id,
+            'title': job.video_title,
+            'subject': getattr(job, 'subject', 'General'),
+        }
+
+        # Process note
+        result = rag_pipeline_stage.process_note(
+            note_path=job.notes_filepath,
+            video_metadata=video_metadata,
+        )
+
+        # Log result
+        if result.success:
+            if result.skipped:
+                print(f"    ↷ {result.skip_reason}")
+            else:
+                elapsed = time.time() - stage_start
+                print(f"    ✓ Indexed {result.chunks_created} chunks ({elapsed:.2f}s)")
+        else:
+            print(f"    ⚠ RAG indexing failed: {result.error_message}")
+
+        return job
+
+    except Exception as e:
+        # RAG failure is not critical - don't fail the pipeline
+        print(f"    ⚠ RAG indexing error: {e}")
+        return job
+
+
 # ============================================================================
 # Stage 4: Export PDFs
 # ============================================================================
@@ -441,6 +507,9 @@ def process_video_job(
             components['filename_sanitizer']
         )
         job = process_obsidian_links(job, components['obsidian_linker'])
+
+        # Stage 3.5: RAG Indexing (optional)
+        job = index_rag_embeddings(job, components.get('rag_pipeline_stage'))
 
         # Stage 4: Export
         job = export_pdfs(job, components.get('pdf_exporter'))

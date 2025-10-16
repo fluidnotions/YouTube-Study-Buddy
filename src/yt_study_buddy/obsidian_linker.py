@@ -1,9 +1,11 @@
 """
 Obsidian linker for automatically creating Obsidian-style [[links]] between study notes.
-Handles fuzzy matching and prevents nested linking issues.
+Handles both RAG-based semantic linking and fuzzy matching fallback.
 """
+import logging
 import os
 import re
+from typing import Optional
 
 try:
     from fuzzywuzzy import fuzz, process
@@ -11,16 +13,77 @@ except ImportError:
     fuzz = None
     process = None
 
+logger = logging.getLogger(__name__)
+
 
 class ObsidianLinker:
-    """Creates Obsidian-style [[links]] between related study notes."""
+    """Creates Obsidian-style [[links]] between related study notes.
 
-    def __init__(self, base_dir="Study notes", subject=None, global_context=True, min_similarity=85):
+    This linker supports two modes:
+    1. RAG-based semantic linking (primary, if enabled)
+    2. Fuzzy matching fallback (if RAG unavailable or disabled)
+    """
+
+    def __init__(self, base_dir="Study notes", subject=None, global_context=True, min_similarity=85, use_rag=True):
         self.base_dir = base_dir
         self.subject = subject
         self.global_context = global_context
         self.min_similarity = min_similarity
         self.note_titles = {}  # Cache of {title: (file_path, subject)}
+
+        # RAG components (lazy initialization)
+        self.use_rag = use_rag
+        self.rag_referencer = None
+        self.rag_config = None
+        self._rag_initialized = False
+
+        # Try to initialize RAG if requested
+        if self.use_rag:
+            self._initialize_rag()
+
+    def _initialize_rag(self):
+        """Initialize RAG components if available."""
+        if self._rag_initialized:
+            return
+
+        try:
+            from .rag.config import load_config_from_env
+            from .rag.embedding_service import EmbeddingService
+            from .rag.vector_store import VectorStore
+            from .rag.cross_referencer import RAGCrossReferencer
+
+            # Load configuration
+            self.rag_config = load_config_from_env()
+
+            if not self.rag_config.enabled:
+                logger.info("RAG is disabled in configuration")
+                self.use_rag = False
+                return
+
+            # Initialize components
+            embedding_service = EmbeddingService(
+                model_name=self.rag_config.model_name,
+                cache_dir=str(self.rag_config.model_cache_dir),
+            )
+
+            vector_store = VectorStore(
+                persist_dir=str(self.rag_config.vector_store_dir),
+                collection_name=self.rag_config.collection_name,
+            )
+
+            self.rag_referencer = RAGCrossReferencer(
+                embedding_service=embedding_service,
+                vector_store=vector_store,
+                config=self.rag_config,
+            )
+
+            self._rag_initialized = True
+            logger.info("RAG initialized successfully for ObsidianLinker")
+
+        except Exception as e:
+            logger.warning(f"Failed to initialize RAG: {e}. Falling back to fuzzy matching.")
+            self.use_rag = False
+            self.rag_referencer = None
 
     def build_note_index(self):
         """Build an index of all available note titles for linking."""
@@ -187,8 +250,89 @@ class ObsidianLinker:
 
         return True
 
-    def apply_links(self, content, file_path, current_title=None):
-        """Apply Obsidian links to the content."""
+    def apply_links(self, content, file_path, current_title=None, current_video_id=None):
+        """Apply Obsidian links to the content using RAG or fuzzy matching.
+
+        Args:
+            content: Markdown content to add links to
+            file_path: Path to the file being processed
+            current_title: Title of current note (to exclude self-references)
+            current_video_id: Video ID of current note (for RAG filtering)
+
+        Returns:
+            Modified content with links added
+        """
+        # Try RAG-based linking first
+        if self.use_rag and self.rag_referencer:
+            try:
+                return self._apply_links_rag(content, file_path, current_title, current_video_id)
+            except Exception as e:
+                logger.warning(f"RAG linking failed: {e}. Falling back to fuzzy matching.")
+
+        # Fallback to fuzzy matching
+        return self._apply_links_fuzzy(content, file_path, current_title)
+
+    def _apply_links_rag(self, content, file_path, current_title=None, current_video_id=None):
+        """Apply links using RAG-based semantic search."""
+        if not current_video_id:
+            # Try to extract video ID from filename
+            current_video_id = self._extract_video_id_from_path(file_path)
+
+        if not current_video_id:
+            logger.warning("No video ID available for RAG linking, using fuzzy fallback")
+            return self._apply_links_fuzzy(content, file_path, current_title)
+
+        # Split content into sections (## headings)
+        sections = self._split_content_into_sections(content)
+
+        if not sections:
+            logger.debug("No sections found in content")
+            return content
+
+        modified_content = content
+        total_links_added = 0
+
+        # Find references for each section
+        for section_title, section_text in sections:
+            # Skip very short sections
+            if len(section_text.strip()) < 50:
+                continue
+
+            # Find cross-references using RAG
+            cross_refs = self.rag_referencer.find_references(
+                section_text=section_text,
+                current_video_id=current_video_id,
+                subject=self.subject if not self.global_context else None,
+                global_context=self.global_context,
+            )
+
+            # Add links to content (limit to avoid over-linking)
+            for ref in cross_refs[:3]:  # Max 3 links per section
+                link = ref.obsidian_link
+                # Check if link already exists in content
+                if link not in modified_content:
+                    # Add link at end of section with "See also:" prefix
+                    section_end_pattern = r'(## ' + re.escape(section_title) + r'.*?)(\n## |\Z)'
+                    match = re.search(section_end_pattern, modified_content, re.DOTALL)
+                    if match:
+                        section_content = match.group(1)
+                        # Add "See also" if not already there
+                        if "See also:" not in section_content:
+                            replacement = section_content + f"\n\n**See also:** {link}"
+                        else:
+                            replacement = section_content.rstrip() + f", {link}"
+
+                        modified_content = modified_content.replace(match.group(1), replacement, 1)
+                        total_links_added += 1
+                        print(f"    RAG linked: {ref.target_video_title} (score: {ref.similarity_score:.3f})")
+
+        if total_links_added > 0:
+            print(f"  Added {total_links_added} RAG-based links")
+
+        return modified_content
+
+    def _apply_links_fuzzy(self, content, file_path, current_title=None):
+        """Apply links using fuzzy matching (original behavior)."""
         if not self.note_titles:
             self.build_note_index()
 
@@ -198,7 +342,7 @@ class ObsidianLinker:
         if not potential_links:
             return content
 
-        print(f"  Found {len(potential_links)} potential links to add")
+        print(f"  Found {len(potential_links)} potential fuzzy links to add")
 
         # Apply links in order of decreasing score to prioritize best matches
         modified_content = content
@@ -220,6 +364,48 @@ class ObsidianLinker:
                 print(f"    Linked: '{phrase}' -> [[{title}]]{subject_info}")
 
         return modified_content
+
+    def _extract_video_id_from_path(self, file_path):
+        """Extract video ID from file path."""
+        try:
+            filename = os.path.basename(file_path)
+            # Try to find a pattern that looks like a YouTube video ID (11 chars)
+            match = re.search(r'([a-zA-Z0-9_-]{11})\.md$', filename)
+            if match:
+                return match.group(1)
+        except Exception as e:
+            logger.debug(f"Could not extract video ID from path: {e}")
+        return None
+
+    def _split_content_into_sections(self, content):
+        """Split markdown content into sections based on ## headings."""
+        sections = []
+
+        # Pattern to match ## headings
+        heading_pattern = re.compile(r'^## (.+)$', re.MULTILINE)
+        matches = list(heading_pattern.finditer(content))
+
+        if not matches:
+            # No sections, return entire content as one section
+            return [("Main Content", content)]
+
+        # Process each section
+        for i, match in enumerate(matches):
+            section_title = match.group(1).strip()
+            start_pos = match.end()
+
+            # Find end of section (next ## heading or end of content)
+            if i < len(matches) - 1:
+                end_pos = matches[i + 1].start()
+            else:
+                end_pos = len(content)
+
+            section_text = content[start_pos:end_pos].strip()
+
+            if section_text:
+                sections.append((section_title, section_text))
+
+        return sections
 
     def process_file(self, file_path):
         """Process a single file to add Obsidian links."""

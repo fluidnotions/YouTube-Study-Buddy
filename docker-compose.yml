@@ -11,14 +11,31 @@ services:
     environment:
       - TOR_HOST=tor-proxy
       - TOR_PORT=9050
+      # RAG Configuration
+      - RAG_ENABLED=${RAG_ENABLED:-true}
+      - RAG_MODEL=${RAG_MODEL:-all-mpnet-base-v2}
+      - RAG_SIMILARITY_THRESHOLD=${RAG_SIMILARITY_THRESHOLD:-0.3}
+      - RAG_MAX_RESULTS=${RAG_MAX_RESULTS:-5}
+      - RAG_BATCH_SIZE=${RAG_BATCH_SIZE:-32}
+      - CHROMA_PERSIST_DIR=/app/.chroma_db
+      - MODEL_CACHE_DIR=/app/.cache
     volumes:
       - ./notes:/app/notes
       - tracker-data:/app/tracker
+      - chroma_data:/app/.chroma_db
+      - model_cache:/app/.cache
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     depends_on:
       tor-proxy:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
 
   tor-proxy:
     image: dperson/torproxy:latest
@@ -47,6 +64,10 @@ volumes:
     driver: local
   tracker-data:
     driver: local  # Persistent exit node tracker data
+  chroma_data:
+    driver: local  # RAG vector database storage
+  model_cache:
+    driver: local  # Sentence transformer models cache
 
 # Two container setup:
 # - tor-proxy: Dedicated Tor proxy (dperson/torproxy)

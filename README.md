@@ -1,61 +1,318 @@
-# RAG Cross-Reference Enhancement - Worktree
+# YouTube Study Buddy - RAG Implementation Branch
 
-This worktree is dedicated to researching and implementing RAG (Retrieval-Augmented Generation) for improved cross-referencing in YouTube Study Buddy.
+This is the RAG (Retrieval-Augmented Generation) implementation branch adding semantic cross-referencing capabilities to YouTube Study Buddy.
 
-## Quick Start
+> **Note:** This README documents Docker configuration for the RAG feature. See the main project README for complete documentation.
+
+## Docker Setup with RAG Support
+
+### Quick Start
 
 ```bash
-cd /home/justin/Documents/dev/python/PycharmProjects/rag-worktree
+# 1. Set your Claude API key and RAG configuration in .env
+cp .env.example .env
+# Edit .env and add your CLAUDE_API_KEY
 
-# Read the detailed task
-cat AGENT_TASK.md
+# 2. Start services
+docker-compose up -d
 
-# Install dependencies
-uv sync
-
-# Start working on the research phase
+# 3. Open browser
+open http://localhost:8501
 ```
 
-## What's Here
+### Volumes
 
-- **AGENT_TASK.md**: Comprehensive task document with objectives, deliverables, and success criteria
-- **Branch**: `feature/rag-cross-reference`
-- **Timeline**: 8-11 hours of focused work
+The docker-compose configuration uses **five volumes** (two new for RAG):
 
-## Why RAG?
+1. **`./notes`** (bind mount) - Study notes output
+   - Appears on host at `./notes/`
+   - Organized by subject
+   - Contains markdown files and PDFs
 
-The current cross-reference system uses simple keyword matching, which:
-- Misses semantic relationships
-- Can't rank relevance
-- Doesn't scale well
-- Has limited recall
+2. **`tracker-data`** (named volume) - Exit node tracker persistence
+   - Tracks which Tor exit IPs were used
+   - Enforces 24-hour cooldown
+   - Survives container restarts
 
-RAG will enable:
-- Semantic understanding of concepts
-- Relevance-ranked connections
-- Fast similarity search
-- Better discovery of related content
+3. **`tor-data`** (named volume) - Tor configuration
+   - Tor circuit state
+   - Docker managed volume
 
-## Deliverables
+4. **`chroma_data`** (named volume) - RAG vector database 🆕
+   - ChromaDB persistent storage
+   - Stores semantic embeddings of note sections
+   - Enables fast similarity search
+   - Docker managed volume
 
-1. **docs/rag-research.md** - Vector DB comparison and recommendations
-2. **docs/rag-design.md** - Architecture and data flow design
-3. **scripts/rag_poc.py** - Working proof of concept
-4. **docs/rag-integration.md** - Implementation roadmap
+5. **`model_cache`** (named volume) - Sentence transformer models 🆕
+   - Cached ML models (~80MB for all-mpnet-base-v2)
+   - Downloaded once, persists across rebuilds
+   - Docker managed volume
 
-## Workflow
+### RAG Configuration
 
-This is a feature branch workflow:
-1. Work is done in this worktree
-2. Commits go to `feature/rag-cross-reference`
-3. When complete, merge to `main` via PR
-4. Worktree can be removed after merge
+Control RAG behavior via environment variables in `.env`:
 
-## Cleanup
+```bash
+# Enable/disable RAG (default: true)
+RAG_ENABLED=true
 
-When done:
+# Embedding model (all-mpnet-base-v2 recommended for quality)
+RAG_MODEL=all-mpnet-base-v2
+
+# Minimum similarity score threshold (0-1, lower = more results)
+RAG_SIMILARITY_THRESHOLD=0.3
+
+# Maximum cross-references per section
+RAG_MAX_RESULTS=5
+
+# Batch size for embedding generation (higher = faster but more memory)
+RAG_BATCH_SIZE=32
+
+# Persistence directories (pre-configured for Docker)
+CHROMA_PERSIST_DIR=/app/.chroma_db
+MODEL_CACHE_DIR=/app/.cache
+```
+
+### Managing RAG Volumes
+
+Use the provided management script for backup, restore, and reset operations:
+
+```bash
+# Backup all RAG volumes (ChromaDB + models)
+./scripts/manage_rag_volumes.sh backup
+
+# Backup only ChromaDB
+./scripts/manage_rag_volumes.sh backup-chroma
+
+# Backup only model cache
+./scripts/manage_rag_volumes.sh backup-models
+
+# Restore ChromaDB from backup
+./scripts/manage_rag_volumes.sh restore backups/rag-volumes/chroma-backup-20251017-143022.tar.gz
+
+# Reset all RAG data (requires confirmation)
+./scripts/manage_rag_volumes.sh reset
+
+# List available backups
+./scripts/manage_rag_volumes.sh list
+
+# Show volume information
+./scripts/manage_rag_volumes.sh info
+```
+
+### Health Checks
+
+Verify RAG components are working correctly:
+
+```bash
+# Full health check
+./scripts/check_rag_health.sh
+
+# Quick check (basic connectivity only)
+./scripts/check_rag_health.sh --quick
+
+# Verbose output with details
+./scripts/check_rag_health.sh --verbose
+```
+
+The health check verifies:
+- ✓ Container is running
+- ✓ RAG is enabled
+- ✓ Environment variables are set
+- ✓ Directories exist
+- ✓ Python dependencies installed
+- ✓ VectorStore is operational
+- ✓ EmbeddingService is working
+- ✓ Disk space usage
+
+### Resource Requirements
+
+**Memory Limits:**
+- Production: 2GB limit, 1GB reservation
+- Development: Same as production
+- RAG components require ~500MB for model + embeddings
+
+**CPU:**
+- 2.0 CPUs allocated
+- CPU-optimized PyTorch (no CUDA)
+
+**Disk Space:**
+- Model cache: ~80-100MB (one-time download)
+- ChromaDB: ~1MB per note (embeddings)
+- Example: 1000 notes ≈ 1GB vector database
+
+### First Run
+
+On first run, the container will:
+1. **Download sentence-transformer model** (~80MB, one-time)
+   - Pre-cached in image if model pre-download succeeded during build
+   - Otherwise downloads on first embedding generation
+2. **Create ChromaDB collection** (if RAG enabled)
+3. **Index existing notes** (if migration script run)
+
+This may take 1-2 minutes depending on network speed.
+
+### Development Mode
+
+For development with source code mounting:
+
+```bash
+# Build and start with source mounting
+docker-compose -f docker-compose.dev.yml up --build
+
+# Separate dev volumes (won't affect production data)
+# - chroma_data_dev
+# - model_cache_dev
+# - tracker-data-dev
+```
+
+Development mode includes:
+- Source code hot-reload (`./src` mounted)
+- Debug logging (`LOG_LEVEL=DEBUG`)
+- Unbuffered Python output
+- Separate volumes from production
+
+## RAG Features
+
+### What is RAG?
+
+RAG (Retrieval-Augmented Generation) uses semantic embeddings to find meaningful connections between concepts, not just keyword matches.
+
+**Before RAG (Keyword Matching):**
+- Searches for exact text matches
+- Misses related concepts
+- Limited relevance ranking
+
+**After RAG (Semantic Understanding):**
+- Understands concept relationships
+- "neural networks" ↔ "deep learning" are recognized as related
+- Relevance-ranked results
+- Better cross-referencing
+
+### How It Works
+
+1. **Note Processing**: After generating notes, content is chunked by sections
+2. **Embedding Generation**: Each section gets a semantic "fingerprint" (768-dimensional vector)
+3. **Vector Storage**: Fingerprints stored in ChromaDB for fast similarity search
+4. **Cross-Referencing**: When creating links, RAG finds semantically similar content
+5. **Link Generation**: Creates `[[Wiki-style]]` links to relevant sections
+
+### Performance
+
+- **Query Speed:** < 100ms for similarity search
+- **Memory:** ~500MB for model + 1000 notes
+- **Storage:** ~1MB per note (embeddings)
+- **Overhead:** ~3-5 seconds per video (background indexing)
+
+### Fallback Behavior
+
+If RAG is unavailable (disabled, error, missing dependencies), the system automatically falls back to fuzzy matching (keyword-based cross-referencing). Your notes will still be generated successfully.
+
+## Troubleshooting
+
+### RAG Not Working
+
+1. **Check container logs:**
+   ```bash
+   docker logs youtube-study-buddy
+   ```
+
+2. **Verify RAG is enabled:**
+   ```bash
+   docker exec youtube-study-buddy printenv RAG_ENABLED
+   ```
+
+3. **Run health check:**
+   ```bash
+   ./scripts/check_rag_health.sh
+   ```
+
+### Model Download Failed
+
+If model download fails during build:
+```bash
+# Model will download on first use (fallback)
+# Or manually download:
+docker exec -it youtube-study-buddy python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-mpnet-base-v2')"
+```
+
+### ChromaDB Connection Error
+
+```bash
+# Check directory permissions
+docker exec youtube-study-buddy ls -la /app/.chroma_db
+
+# Reset ChromaDB volume
+./scripts/manage_rag_volumes.sh reset
+
+# Restart containers
+docker-compose restart
+```
+
+### Out of Memory
+
+If container runs out of memory:
+
+1. **Increase memory limit in docker-compose.yml:**
+   ```yaml
+   deploy:
+     resources:
+       limits:
+         memory: 3G  # Increase from 2G
+   ```
+
+2. **Reduce batch size in .env:**
+   ```bash
+   RAG_BATCH_SIZE=16  # Reduce from 32
+   ```
+
+3. **Use smaller model:**
+   ```bash
+   RAG_MODEL=all-MiniLM-L6-v2  # Smaller but less accurate
+   ```
+
+## Migration from Non-RAG Setup
+
+If you have existing notes from before RAG:
+
+1. **Enable RAG in .env:**
+   ```bash
+   RAG_ENABLED=true
+   ```
+
+2. **Run migration script:**
+   ```bash
+   docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py
+   ```
+
+3. **Verify indexing:**
+   ```bash
+   ./scripts/check_rag_health.sh --verbose
+   ```
+
+See `scripts/migrate_notes_to_rag.py --help` for options.
+
+## Worktree Information
+
+This is a git worktree for the `feature/rag-cross-reference` branch.
+
+**Coordinated Agent Tasks:**
+- See `COORDINATED_AGENT_TASKS.md` for multi-agent implementation plan
+- Agent 4 (Docker Configuration) completed
+- Other agents handle core infrastructure, pipeline integration, etc.
+
+**When done:**
 ```bash
 cd /home/justin/Documents/dev/python/PycharmProjects/ytstudybuddy
 git worktree remove ../rag-worktree
-git branch -d feature/rag-cross-reference
+git branch -d feature/rag-cross-reference  # After merging to main
 ```
+
+## Documentation
+
+- [COORDINATED_AGENT_TASKS.md](COORDINATED_AGENT_TASKS.md) - Multi-agent implementation plan
+- [docs/rag-research.md](docs/rag-research.md) - Vector DB comparison
+- [docs/rag-design.md](docs/rag-design.md) - Architecture design
+- [docs/rag-integration.md](docs/rag-integration.md) - Integration roadmap
+- Main project README - Complete feature documentation

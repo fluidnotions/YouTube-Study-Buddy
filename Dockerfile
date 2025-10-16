@@ -32,8 +32,17 @@ RUN uv pip install --system --no-cache \
     torch --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --system --no-cache -e .
 
-# Create notes directory
-RUN mkdir -p /app/notes
+# Pre-download RAG model (optional, speeds up first run)
+# This will cache the sentence-transformer model in the image
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    SentenceTransformer('all-mpnet-base-v2')" || true
+
+# Create application directories
+RUN mkdir -p /app/notes && \
+    mkdir -p /app/.chroma_db && \
+    mkdir -p /app/.cache && \
+    chmod 777 /app/.chroma_db && \
+    chmod 777 /app/.cache
 
 # Expose Streamlit port
 EXPOSE 8501

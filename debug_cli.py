@@ -26,48 +26,16 @@ from yt_study_buddy.cli import main
 # EDIT THIS SECTION TO TEST DIFFERENT CLI COMMANDS
 # ============================================================
 
-# Example 1: Single video
+
 CLI_ARGS = [
-    '--debug-logging',          # Enable detailed logging to analyze title fetching
+    '--debug-logging',
     '--parallel',
     '--workers', '3',
+    '--export-pdf',
     'https://youtu.be/2VauS2awvMw',
     'https://youtu.be/3le-v1Pme44',
     'https://youtu.be/g80Q1sVtikE'
 ]
-
-
-# Example 2: Parallel processing
-# CLI_ARGS = [
-#     '--parallel',
-#     '--workers', '3',
-#     '--file', 'urls.txt'
-# ]
-
-# Example 3: With subject
-# CLI_ARGS = [
-#     '--subject', 'Machine Learning',
-#     'https://youtube.com/watch?v=xyz'
-# ]
-
-# Example 4: Multiple videos
-# CLI_ARGS = [
-#     'https://youtube.com/watch?v=abc',
-#     'https://youtube.com/watch?v=def',
-#     'https://youtube.com/watch?v=ghi'
-# ]
-
-# Example 5: All options
-# CLI_ARGS = [
-#     '--parallel',
-#     '--workers', '5',
-#     '--subject', 'Python Programming',
-#     '--no-assessments',
-#     '--file', 'python_videos.txt'
-# ]
-
-# ============================================================
-
 
 def debug_with_args(args):
     """

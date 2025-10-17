@@ -504,13 +504,57 @@ class TorTranscriptFetcher:
             print(f"Tor connection check failed: {e}")
             return False
 
+    def check_transcript_availability(
+        self,
+        video_id: str,
+        languages: List[str] = ['en']
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Quick check if transcript is available in requested languages.
+
+        Args:
+            video_id: YouTube video ID
+            languages: List of language codes to check
+
+        Returns:
+            Tuple of (is_available, error_message)
+        """
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+
+            # List available transcripts (fast operation)
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+            # Check if any requested language is available
+            for lang in languages:
+                try:
+                    transcript_list.find_transcript([lang])
+                    return True, None
+                except:
+                    continue
+
+            # Get available languages for error message
+            available_langs = []
+            for transcript in transcript_list:
+                available_langs.append(transcript.language_code)
+
+            if available_langs:
+                return False, f"No transcript in {languages}, available: {available_langs[:5]}"
+            else:
+                return False, "No transcripts available for this video"
+
+        except Exception as e:
+            # If check fails, allow attempt (might still work)
+            return True, None
+
     def fetch_transcript(
         self,
         video_id: str,
         languages: List[str] = ['en'],
         max_retries: int = 5,
         base_timeout: int = 60,
-        max_timeout: int = 120
+        max_timeout: int = 120,
+        check_availability: bool = True
     ) -> Optional[Dict[str, Any]]:
         """
         Fetch transcript using Tor proxy with enhanced retry mechanism.
@@ -521,10 +565,18 @@ class TorTranscriptFetcher:
             max_retries: Maximum number of retry attempts (default: 5)
             base_timeout: Base timeout in seconds (default: 60)
             max_timeout: Maximum timeout in seconds (default: 120)
+            check_availability: Quick check before fetching (default: True)
 
         Returns:
             Dictionary with transcript data or None if failed
         """
+        # Quick availability check to fail fast
+        if check_availability:
+            is_available, error_msg = self.check_transcript_availability(video_id, languages)
+            if not is_available:
+                print(f"⚠️  Transcript not available: {error_msg}")
+                return None
+
         last_error = None
 
         for attempt in range(max_retries):
@@ -661,8 +713,9 @@ class TorTranscriptFetcher:
         video_id: str,
         max_retries: int = 3,
         timeout: int = 30,
-        worker_id: Optional[int] = None
-    ) -> str:
+        worker_id: Optional[int] = None,
+        return_status: bool = False
+    ) -> str | tuple[str, bool, Optional[str]]:
         """
         Get video title using YouTube oEmbed API through Tor with retry.
 
@@ -671,9 +724,11 @@ class TorTranscriptFetcher:
             max_retries: Maximum number of retry attempts (default: 3)
             timeout: Timeout in seconds per attempt (default: 30)
             worker_id: Optional worker ID for logging
+            return_status: If True, returns (title, success, error_reason)
 
         Returns:
-            Video title (cleaned for filename) or fallback Video_ID
+            If return_status=False: Video title (cleaned) or fallback Video_ID
+            If return_status=True: Tuple of (title, success, error_reason)
         """
         logger = get_logger()
         url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
@@ -739,6 +794,9 @@ class TorTranscriptFetcher:
                             worker_id=worker_id
                         )
                         print(f"  ✓ Title: {result}")
+
+                        if return_status:
+                            return result, True, None
                         return result
                     else:
                         print(f"  ✗ No 'title' field in response")
@@ -784,8 +842,19 @@ class TorTranscriptFetcher:
         fallback = f"Video_{video_id}"
         print(f"  ✗ All {max_retries} attempts failed, using fallback: {fallback}")
 
+        # Determine reason for failure
+        error_reason = None
         if last_error:
-            print(f"  Last error: {last_error}")
+            error_str = str(last_error)
+            if 'timeout' in error_str.lower():
+                error_reason = "Title fetch timeout"
+            elif 'block' in error_str.lower() or '429' in error_str or '403' in error_str:
+                error_reason = "YouTube blocking requests (rate limit or IP block)"
+            elif 'connection' in error_str.lower():
+                error_reason = "Connection error"
+            else:
+                error_reason = f"API error: {error_str[:50]}"
+            print(f"  Last error: {error_reason}")
 
         logger.log_title_result(
             video_id=video_id,
@@ -795,6 +864,8 @@ class TorTranscriptFetcher:
             worker_id=worker_id
         )
 
+        if return_status:
+            return fallback, False, error_reason
         return fallback
 
 

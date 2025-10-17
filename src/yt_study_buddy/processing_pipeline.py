@@ -47,6 +47,9 @@ def fetch_transcript_and_title(
         print(f"  [Job {job.video_id}] Fetching transcript...")
         transcript_data = video_processor.get_transcript(job.video_id)
 
+        if not transcript_data:
+            raise ValueError("Could not get transcript: Both Tor and yt-dlp fallback failed")
+
         job.transcript = transcript_data['transcript']
         job.transcript_data = transcript_data
 
@@ -54,13 +57,27 @@ def fetch_transcript_and_title(
             print(f"    Duration: {transcript_data['duration']}")
         print(f"    Length: {transcript_data['length']} characters")
 
-        # Fetch title
+        # Fetch title with status check
         print(f"  [Job {job.video_id}] Fetching title...")
-        job.video_title = video_processor.get_video_title(
+        title_result = video_processor.get_video_title(
             job.video_id,
-            worker_id=worker_id
+            worker_id=worker_id,
+            return_status=True
         )
-        print(f"    Title: {job.video_title}")
+
+        if isinstance(title_result, tuple):
+            job.video_title, title_success, title_error = title_result
+
+            # Log title fetch issues but continue processing
+            if not title_success and title_error:
+                print(f"    ⚠️  Title fetch failed: {title_error}")
+                print(f"    Continuing with fallback: {job.video_title}")
+            else:
+                print(f"    Title: {job.video_title}")
+        else:
+            # Backwards compatibility
+            job.video_title = title_result
+            print(f"    Title: {job.video_title}")
 
         job.set_stage(ProcessingStage.TRANSCRIPT_FETCHED)
         job.add_timing('fetch_transcript', time.time() - stage_start)

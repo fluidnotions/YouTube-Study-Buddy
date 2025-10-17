@@ -78,23 +78,25 @@ class ParallelVideoProcessor:
         start_time = time.time()
 
         # Create wrapper function that creates per-worker instance if needed
-        def worker_wrapper(url: str) -> ProcessingResult:
+        def worker_wrapper(url_and_id: tuple) -> ProcessingResult:
+            url, worker_id = url_and_id
             if worker_factory:
                 worker_instance = worker_factory()
-                return process_func(url, worker_instance)
+                return process_func(url, worker_instance, worker_id=worker_id)
             else:
-                return process_func(url)
+                return process_func(url, worker_id=worker_id)
 
         # Use ThreadPoolExecutor for I/O-bound tasks
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit all tasks
+            # Submit all tasks with worker IDs
             future_to_url = {}
             for i, url in enumerate(urls):
                 # Add rate limiting between submissions
                 if i > 0 and self.rate_limit_delay > 0:
                     time.sleep(self.rate_limit_delay)
 
-                future = executor.submit(worker_wrapper, url)
+                worker_id = i % self.max_workers  # Assign worker ID based on worker pool
+                future = executor.submit(worker_wrapper, (url, worker_id))
                 future_to_url[future] = url
 
             # Collect results as they complete

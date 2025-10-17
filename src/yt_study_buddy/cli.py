@@ -13,12 +13,17 @@ import sys
 import time
 import threading
 
+from pathlib import Path
+
 from .assessment_generator import AssessmentGenerator
 from .auto_categorizer import AutoCategorizer
+from .job_logger import create_default_logger
 from .knowledge_graph import KnowledgeGraph
 from .obsidian_linker import ObsidianLinker
 from .parallel_processor import ParallelVideoProcessor, ProcessingResult, ProcessingMetrics
+from .processing_pipeline import process_video_job
 from .study_notes_generator import StudyNotesGenerator
+from .video_job import create_job_from_url
 from .video_processor import VideoProcessor
 
 try:
@@ -71,6 +76,9 @@ class YouTubeStudyNotes:
         self._file_lock = threading.Lock()
         self._kg_lock = threading.Lock()
 
+        # Job logger for tracking all processing results
+        self.job_logger = create_default_logger(Path(self.base_dir))
+
         # Add parallel processor
         if self.parallel:
             self.parallel_processor = ParallelVideoProcessor(
@@ -97,17 +105,19 @@ class YouTubeStudyNotes:
 
         return urls
 
-    def process_single_url(self, url, worker_processor=None):
+    def process_single_url(self, url, worker_processor=None, worker_id=None):
         """
-        Process a single YouTube URL and generate study notes.
+        Process a single YouTube URL using stateless pipeline.
 
         Args:
             url: YouTube URL to process
             worker_processor: Optional VideoProcessor instance for this worker.
                             If None, uses self.video_processor (shared instance).
-        """
-        start_time = time.time()
+            worker_id: Optional worker ID for logging/debugging
 
+        Returns:
+            ProcessingResult with outcome
+        """
         # Use per-worker processor if provided, otherwise use shared instance
         processor = worker_processor if worker_processor else self.video_processor
 
@@ -122,162 +132,100 @@ class YouTubeStudyNotes:
                 error="Invalid YouTube URL"
             )
 
-        print(f"\nFound video ID: {video_id}")
-        if self.subject:
-            print(f"Subject: {self.subject}")
-            print(f"Cross-reference scope: {'Global' if self.global_context else 'Subject-only'}")
+        # Handle auto-categorization - need to fetch transcript first
+        current_subject = self.subject
+        current_output_dir = self.output_dir
 
-        try:
-            # Get transcript
-            print("Fetching transcript from YouTube via Tor...")
-            transcript_data = processor.get_transcript(video_id)
-            transcript = transcript_data['transcript']
-            method = transcript_data.get('method', 'tor')
+        # If auto-categorizing, we need to fetch transcript and title first
+        if self.auto_categorizer and not self.subject:
+            try:
+                print("Fetching transcript for auto-categorization...")
+                transcript_data = processor.get_transcript(video_id)
+                video_title = processor.get_video_title(video_id, worker_id=worker_id)
 
-            if transcript_data['duration']:
-                print(f"Video duration: {transcript_data['duration']}")
-            print(f"Transcript length: {transcript_data['length']} characters")
-
-            # Get video title
-            print("Fetching video title...")
-            video_title = processor.get_video_title(video_id)
-
-            # Auto-categorize if no subject provided
-            if self.auto_categorizer and not self.subject:
                 print("Auto-categorizing video content...")
                 detected_subject = self.auto_categorizer.categorize_video(
-                    transcript, video_title, self.base_dir
+                    transcript_data['transcript'], video_title, self.base_dir
                 )
                 print(f"Detected subject: {detected_subject}")
 
-                # Update subject and output directory
-                self.subject = detected_subject
-                self.output_dir = os.path.join(self.base_dir, detected_subject)
+                current_subject = detected_subject
+                current_output_dir = os.path.join(self.base_dir, detected_subject)
 
-                # Update components with new subject
-                self.knowledge_graph = KnowledgeGraph(self.base_dir, detected_subject, self.global_context)
-                self.obsidian_linker = ObsidianLinker(self.base_dir, detected_subject, self.global_context)
+                # Update components with new subject (thread-safe)
+                with self._kg_lock:
+                    self.knowledge_graph = KnowledgeGraph(self.base_dir, detected_subject, self.global_context)
+                    self.obsidian_linker = ObsidianLinker(self.base_dir, detected_subject, self.global_context)
 
-            # Ensure output directory exists
-            os.makedirs(self.output_dir, exist_ok=True)
+            except Exception as e:
+                print(f"Auto-categorization failed: {e}, using base directory")
+                current_subject = None
+                current_output_dir = self.base_dir
 
-            # Generate study notes with Claude
-            print("Generating study notes with Claude AI...")
-            study_notes = self.notes_generator.generate_notes(
-                transcript=transcript
-            )
+        print(f"\nFound video ID: {video_id}")
+        if current_subject:
+            print(f"Subject: {current_subject}")
+            print(f"Cross-reference scope: {'Global' if self.global_context else 'Subject-only'}")
 
-            # Save to file using the notes generator's method
-            sanitized_title = processor.sanitize_filename(video_title)
-            filename = f"{sanitized_title}.md"
-            filepath = os.path.join(self.output_dir, filename)
+        # Create job object
+        job = create_job_from_url(url, video_id, subject=current_subject, worker_id=worker_id)
 
-            # Create markdown file with header
-            original_url = f"https://www.youtube.com/watch?v={video_id}"
-            markdown_content = f"# {video_title}\n\n[YouTube Video]({original_url})\n\n---\n\n{study_notes}"
+        # Build components dict for pipeline
+        components = {
+            'video_processor': processor,
+            'notes_generator': self.notes_generator,
+            'assessment_generator': self.assessment_generator,
+            'obsidian_linker': self.obsidian_linker,
+            'pdf_exporter': self.pdf_exporter,
+            'job_logger': self.job_logger,
+            'output_dir': Path(current_output_dir),
+            'filename_sanitizer': processor.sanitize_filename
+        }
 
-            # ===================================================================
-            # PHASE 1: Generate all content (PARALLEL - outside lock)
-            # ===================================================================
-
-            # Generate assessment if enabled (expensive Claude API call - do in parallel!)
-            assessment_content = None
-            assessment_filename = None
-            assessment_path = None
-
-            if self.assessment_generator:
-                print("Generating learning assessment...")
-                try:
-                    assessment_content = self.assessment_generator.generate_assessment(
-                        transcript, study_notes, video_title, original_url
-                    )
-                    assessment_filename = self.assessment_generator.create_assessment_filename(video_title)
-                    assessment_path = os.path.join(self.output_dir, assessment_filename)
-                    print(f"  ✓ Assessment generated")
-
-                except Exception as e:
-                    print(f"  ✗ Assessment generation failed: {e}")
-                    assessment_content = None
-
-            # ===================================================================
-            # PHASE 2: Write files (FAST - needs lock for thread safety)
-            # ===================================================================
-
-            with self._file_lock:
-                # Write study notes file
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(markdown_content)
-                print(f"✓ Study notes saved to {filename}")
-
-                # Write assessment file if generated
-                if assessment_content and assessment_path:
-                    with open(assessment_path, 'w', encoding='utf-8') as f:
-                        f.write(assessment_content)
-                    print(f"  ✓ Assessment saved to {assessment_filename}")
-
-                # Add cross-references using Obsidian linker (relatively fast)
-                print("Adding cross-references to related notes...")
-                self.obsidian_linker.process_file(filepath)
-
-            # ===================================================================
-            # PHASE 3: Export PDFs (PARALLEL - outside lock, per-worker)
-            # ===================================================================
-
-            if self.pdf_exporter:
-                print("Exporting to PDF...")
-                try:
-                    # Export study notes PDF
-                    pdf_path = self.pdf_exporter.markdown_to_pdf(filepath)
-                    print(f"  ✓ PDF exported: {pdf_path.name}")
-
-                    # Export assessment PDF if it was generated
-                    if assessment_path and os.path.exists(assessment_path):
-                        assessment_pdf = self.pdf_exporter.markdown_to_pdf(assessment_path)
-                        print(f"  ✓ Assessment PDF: {assessment_pdf.name}")
-
-                except Exception as e:
-                    print(f"  ✗ PDF export failed: {e}")
+        # Process through stateless pipeline
+        try:
+            job = process_video_job(job, components)
 
             # Update knowledge graph cache (thread-safe)
             with self._kg_lock:
-                # Refresh knowledge graph cache to include the new note
                 self.knowledge_graph.refresh_cache()
 
-            duration = time.time() - start_time
+            # Convert job to ProcessingResult
             return ProcessingResult(
-                url=url,
-                video_id=video_id,
-                success=True,
-                title=video_title,
-                filepath=filepath,
-                duration_seconds=duration,
-                method=method
+                url=job.url,
+                video_id=job.video_id,
+                success=job.success,
+                title=job.video_title,
+                filepath=str(job.notes_filepath) if job.notes_filepath else None,
+                duration_seconds=job.processing_duration,
+                method=job.transcript_data.get('method', 'tor') if job.transcript_data else 'unknown'
             )
 
         except Exception as e:
-            duration = time.time() - start_time
             print(f"\nERROR processing {url}: {e}")
 
-            # Special handling for rate limiting
-            if "rate limit" in str(e).lower() or "429" in str(e) or "too many requests" in str(e).lower():
-                print("\n⚠ RATE LIMITING DETECTED!")
-                print("YouTube is temporarily blocking requests. Solutions:")
-                print("1. Wait 15-30 minutes before trying again")
-                print("2. Process fewer videos at once")
-                print("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
-            else:
-                print("\nTroubleshooting:")
-                print("1. Check if the video has captions/subtitles enabled")
-                print("2. Some videos restrict transcript access")
-                print("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
-
+            # Job was already logged by pipeline, just return failure
             return ProcessingResult(
                 url=url,
                 video_id=video_id,
                 success=False,
                 error=str(e),
-                duration_seconds=duration
+                duration_seconds=job.processing_duration if hasattr(job, 'processing_duration') else 0
             )
+
+    def _handle_rate_limit_error(self, e):
+        """Handle rate limit errors with helpful message."""
+        if "rate limit" in str(e).lower() or "429" in str(e) or "too many requests" in str(e).lower():
+            print("\n⚠ RATE LIMITING DETECTED!")
+            print("YouTube is temporarily blocking requests. Solutions:")
+            print("1. Wait 15-30 minutes before trying again")
+            print("2. Process fewer videos at once")
+            print("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
+        else:
+            print("\nTroubleshooting:")
+            print("1. Check if the video has captions/subtitles enabled")
+            print("2. Some videos restrict transcript access")
+            print("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
 
     def process_urls(self, urls):
         """Process a list of URLs (sequential or parallel)."""
@@ -332,7 +280,7 @@ class YouTubeStudyNotes:
                     print("  Waiting 3 seconds to avoid rate limiting...")
                     time.sleep(3)
 
-                result = self.process_single_url(url)
+                result = self.process_single_url(url, worker_id=0)
                 if result.success:
                     successful += 1
 

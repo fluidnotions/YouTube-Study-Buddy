@@ -1,15 +1,80 @@
-# YouTube Study Buddy - RAG Implementation Branch
+# YouTube Study Buddy
 
-This is the RAG (Retrieval-Augmented Generation) implementation branch adding semantic cross-referencing capabilities to YouTube Study Buddy.
+Learning from educational YouTube videos and want to maximize retention and build meaningful connections? **YouTube Study Buddy** transforms any YouTube video into structured study notes with intelligent cross-referencing that builds your personal knowledge graph over time, turning scattered video content into an interconnected learning system.
 
-> **Note:** This README documents Docker configuration for the RAG feature. See the main project README for complete documentation.
+## 🧠 The Science: Active Learning vs Passive Watching
 
-## Docker Setup with RAG Support
+**Traditional passive note-taking** often leads to the "illusion of competence" – where learners feel they understand content simply because they've transcribed it. YouTube Study Buddy implements research-backed learning principles:
 
-### Quick Start
+- **Dual Coding Theory** – Combines text with visual spatial organization for stronger memory formation
+- **Generation Effect** – Assessment questions force active answer generation, improving retention
+- **Desirable Difficulties** – "One-up" challenges introduce productive struggle beyond the presented material
+- **Elaborative Interrogation** – Gap analysis questions reveal what your brain filtered out
+- **Spaced Retrieval Practice** – Separation of note generation from video watching enables spaced review
 
+**Result:** Instead of passive consumption, you get an active learning system with notes AND assessment questions that test understanding beyond surface-level recall.
+
+## 💰 Why This Tool Exists (Free vs Paid Alternatives)
+
+Most AI-powered YouTube note-taking solutions in 2025 require expensive subscriptions or have significant limitations:
+
+**Paid Solutions ($10-50+/month):**
+- **NoteGPT** - Comprehensive AI learning assistant (premium features require subscription)
+- **Notta** - Professional transcription service (98.86% accuracy, limited free tier)
+- **Eightify** - AI video summarizer (subscription for unlimited summaries)
+- **Maestra** - Multi-language support (subscription for full feature access)
+
+**Free Alternatives (Limited Features):**
+- **Basic transcript generators** - No AI analysis, just raw text extraction
+- **Tactiq** - Chrome extension transcription (no study note formatting)
+- **YouTube auto-captions** - Inaccurate, no structure or cross-referencing
+- **Manual note-taking** - Time-consuming, no automation or connections
+
+**YouTube Study Buddy is completely free** and provides AI-powered study note generation with intelligent cross-referencing and Obsidian integration. Perfect for students, lifelong learners, and professionals who want to build a connected knowledge base without subscription costs.
+
+Unlike simple transcript extractors, YouTube Study Buddy creates **structured study materials** with cross-references that grow smarter with each video you process, building an interconnected web of knowledge over time.
+
+## ✨ Key Features
+
+### Core Learning Features
+- **AI-Powered Study Notes** – Transforms raw transcripts into structured learning materials with defined sections
+- **Learning Assessments** – Generates 4 question types including unique "One-Up Challenges" that ask you to improve upon what you learned
+- **Auto-Categorization** – ML-powered subject detection organizes your knowledge base automatically
+- **Batch Processing** – Process multiple videos efficiently with URL file support
+- **Markdown Output** – Compatible with Obsidian, Notion, and other markdown-based tools
+
+### Intelligent Cross-Referencing (RAG)
+- **Semantic Understanding** – Goes beyond keyword matching to find conceptually related content
+- **Smart Connections** – Automatically links "neural networks" with "deep learning" and similar concepts
+- **Knowledge Graph Growth** – Each new video strengthens connections in your existing knowledge base
+- **Obsidian Integration** – Creates `[[wiki-style]]` links for seamless knowledge graph building
+- **Subject Organization** – Organize notes by topic with global or subject-specific cross-referencing
+
+### What Makes RAG Special?
+
+Traditional keyword matching misses conceptual relationships. YouTube Study Buddy uses **RAG (Retrieval-Augmented Generation)** with semantic embeddings to understand meaning, not just match words:
+
+**Before (Keyword Matching):**
+- "machine learning" only finds exact text matches
+- Misses related concepts like "neural networks" or "deep learning"
+- Limited relevance ranking
+
+**After (Semantic RAG):**
+- Understands that "gradient descent" relates to "backpropagation"
+- Finds conceptual connections across your entire knowledge base
+- Relevance-ranked results prioritize the most meaningful links
+
+## 🎯 Why It Matters
+
+For students, researchers, and lifelong learners, this solves the pain of information overload and disconnected knowledge. Instead of isolated notes that sit unused, you get **interconnected study materials** that reveal patterns, reinforce learning, and help you build genuine understanding across topics.
+
+## 🚀 Quick Start
+
+### Docker (Recommended)
 ```bash
-# 1. Set your Claude API key and RAG configuration in .env
+# 1. Clone and configure
+git clone https://github.com/fluidnotions/YouTube-Study-Buddy.git
+cd YouTube-Study-Buddy
 cp .env.example .env
 # Edit .env and add your CLAUDE_API_KEY
 
@@ -20,384 +85,123 @@ docker-compose up -d
 open http://localhost:8501
 ```
 
-### Volumes
+See [Docker Setup Guide](docs/DOCKER_SETUP.md) for configuration options, troubleshooting, and RAG features.
 
-The docker-compose configuration uses **five volumes** (two new for RAG):
-
-1. **`./notes`** (bind mount) - Study notes output
-   - Appears on host at `./notes/`
-   - Organized by subject
-   - Contains markdown files and PDFs
-
-2. **`tracker-data`** (named volume) - Exit node tracker persistence
-   - Tracks which Tor exit IPs were used
-   - Enforces 24-hour cooldown
-   - Survives container restarts
-
-3. **`tor-data`** (named volume) - Tor configuration
-   - Tor circuit state
-   - Docker managed volume
-
-4. **`chroma_data`** (named volume) - RAG vector database 🆕
-   - ChromaDB persistent storage
-   - Stores semantic embeddings of note sections
-   - Enables fast similarity search
-   - Docker managed volume
-
-5. **`model_cache`** (named volume) - Sentence transformer models 🆕
-   - Cached ML models (~80MB for all-mpnet-base-v2)
-   - Downloaded once, persists across rebuilds
-   - Docker managed volume
-
-### RAG Configuration
-
-Control RAG behavior via environment variables in `.env`:
-
+### Local Installation
 ```bash
-# Enable/disable RAG (default: true)
-RAG_ENABLED=true
+# 1. Install dependencies
+pip install -r requirements.txt
 
-# Embedding model (all-mpnet-base-v2 recommended for quality)
-RAG_MODEL=all-mpnet-base-v2
+# 2. Configure API key
+echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# Minimum similarity score threshold (0-1, lower = more results)
-RAG_SIMILARITY_THRESHOLD=0.3
+# 3. Run Streamlit interface
+streamlit run streamlit_app.py
 
-# Maximum cross-references per section
-RAG_MAX_RESULTS=5
-
-# Batch size for embedding generation (higher = faster but more memory)
-RAG_BATCH_SIZE=32
-
-# Persistence directories (pre-configured for Docker)
-CHROMA_PERSIST_DIR=/app/.chroma_db
-MODEL_CACHE_DIR=/app/.cache
+# Or use CLI
+python main.py "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-### Managing RAG Volumes
+## 💡 Usage Examples
 
-Use the provided management script for backup, restore, and reset operations:
+### Web Interface (Streamlit)
+The easiest way to use YouTube Study Buddy:
+1. Start the app: `streamlit run streamlit_app.py`
+2. Paste YouTube URL
+3. Select subject (optional)
+4. Click "Generate Notes"
+5. Download markdown or view in browser
 
+### Command Line Interface
+
+**Single Video:**
 ```bash
-# Backup all RAG volumes (ChromaDB + models)
-./scripts/manage_rag_volumes.sh backup
+# With subject organization
+python main.py --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
 
-# Backup only ChromaDB
-./scripts/manage_rag_volumes.sh backup-chroma
-
-# Backup only model cache
-./scripts/manage_rag_volumes.sh backup-models
-
-# Restore ChromaDB from backup
-./scripts/manage_rag_volumes.sh restore backups/rag-volumes/chroma-backup-20251017-143022.tar.gz
-
-# Reset all RAG data (requires confirmation)
-./scripts/manage_rag_volumes.sh reset
-
-# List available backups
-./scripts/manage_rag_volumes.sh list
-
-# Show volume information
-./scripts/manage_rag_volumes.sh info
+# Without subject (global knowledge base)
+python main.py "https://youtube.com/watch?v=xyz"
 ```
 
-### Health Checks
-
-Verify RAG components are working correctly:
-
+**Batch Processing:**
 ```bash
-# Full health check
-./scripts/check_rag_health.sh
+# Create urls.txt with one URL per line
+echo "https://youtube.com/watch?v=abc123" > urls.txt
+echo "https://youtube.com/watch?v=def456" >> urls.txt
 
-# Quick check (basic connectivity only)
-./scripts/check_rag_health.sh --quick
-
-# Verbose output with details
-./scripts/check_rag_health.sh --verbose
+# Process all URLs
+python main.py --batch
 ```
 
-The health check verifies:
-- ✓ Container is running
-- ✓ RAG is enabled
-- ✓ Environment variables are set
-- ✓ Directories exist
-- ✓ Python dependencies installed
-- ✓ VectorStore is operational
-- ✓ EmbeddingService is working
-- ✓ Disk space usage
-
-### Resource Requirements
-
-**Memory Limits:**
-- Production: 2GB limit, 1GB reservation
-- Development: Same as production
-- RAG components require ~500MB for model + embeddings
-
-**CPU:**
-- 2.0 CPUs allocated
-- CPU-optimized PyTorch (no CUDA)
-
-**Disk Space:**
-- Model cache: ~80-100MB (one-time download)
-- ChromaDB: ~1MB per note (embeddings)
-- Example: 1000 notes ≈ 1GB vector database
-
-### First Run
-
-On first run, the container will:
-1. **Download sentence-transformer model** (~80MB, one-time)
-   - Pre-cached in image if model pre-download succeeded during build
-   - Otherwise downloads on first embedding generation
-2. **Create ChromaDB collection** (if RAG enabled)
-3. **Index existing notes** (if migration script run)
-
-This may take 1-2 minutes depending on network speed.
-
-### Development Mode
-
-For development with source code mounting:
-
+**Subject-Specific Organization:**
 ```bash
-# Build and start with source mounting
-docker-compose -f docker-compose.dev.yml up --build
+# Cross-reference within subject only
+python main.py --subject "AI Ethics" --subject-only --batch
 
-# Separate dev volumes (won't affect production data)
-# - chroma_data_dev
-# - model_cache_dev
-# - tracker-data-dev
+# Cross-reference globally (default)
+python main.py --subject "Python Programming" --batch
 ```
 
-Development mode includes:
-- Source code hot-reload (`./src` mounted)
-- Debug logging (`LOG_LEVEL=DEBUG`)
-- Unbuffered Python output
-- Separate volumes from production
+## 📚 Example Output
 
-## RAG Features
+Each generated note includes:
 
-### What is RAG?
+### 1. Structured Content
+- Main concepts and key ideas
+- Definitions and terminology
+- Examples and applications
+- Summary and takeaways
 
-RAG (Retrieval-Augmented Generation) uses semantic embeddings to find meaningful connections between concepts, not just keyword matches.
+### 2. Learning Assessments
+- **Comprehension Questions** - Test basic understanding
+- **Application Questions** - Apply concepts to new scenarios
+- **Gap Analysis** - Identify what wasn't explicitly covered
+- **One-Up Challenges** - Extend beyond the material
 
-**Before RAG (Keyword Matching):**
-- Searches for exact text matches
-- Misses related concepts
-- Limited relevance ranking
+### 3. Intelligent Cross-References
+- `[[Related Topic 1]]` - Semantically similar content
+- `[[Related Topic 2]]` - Connected concepts from other notes
+- Links ranked by relevance using RAG similarity scores
 
-**After RAG (Semantic Understanding):**
-- Understands concept relationships
-- "neural networks" ↔ "deep learning" are recognized as related
-- Relevance-ranked results
-- Better cross-referencing
+## 🛠️ Technical Details
 
-### How It Works
+Built with:
+- **AI:** Claude API (Anthropic) for intelligent note generation
+- **Cross-Referencing:** Semantic embeddings with ChromaDB vector store
+- **ML Models:** Sentence transformers for concept similarity
+- **Transcript:** youtube-transcript-api with yt-dlp fallback
+- **Interface:** Streamlit web UI + CLI
+- **Integration:** Obsidian-compatible markdown output
 
-1. **Note Processing**: After generating notes, content is chunked by sections
-2. **Embedding Generation**: Each section gets a semantic "fingerprint" (768-dimensional vector)
-3. **Vector Storage**: Fingerprints stored in ChromaDB for fast similarity search
-4. **Cross-Referencing**: When creating links, RAG finds semantically similar content
-5. **Link Generation**: Creates `[[Wiki-style]]` links to relevant sections
+Python 3.10+ required.
 
-### Performance
+## 📖 Documentation
 
-- **Query Speed:** < 100ms for similarity search
-- **Memory:** ~500MB for model + 1000 notes
-- **Storage:** ~1MB per note (embeddings)
-- **Overhead:** ~3-5 seconds per video (background indexing)
+- [Docker Setup Guide](docs/DOCKER_SETUP.md) - Complete Docker configuration and troubleshooting
+- [RAG Design](docs/rag-design.md) - How semantic cross-referencing works
+- [RAG Integration](docs/rag-integration.md) - Migration guide and technical details
+- [Retry Guide](docs/RETRY_GUIDE.md) - Error handling and retry system
 
-### Fallback Behavior
+## 🤝 Contributing
 
-If RAG is unavailable (disabled, error, missing dependencies), the system automatically falls back to fuzzy matching (keyword-based cross-referencing). Your notes will still be generated successfully.
+Contributions welcome! This project is actively developed and open to improvements in:
+- Learning assessment quality
+- Cross-referencing algorithms
+- Additional AI model support
+- UI/UX enhancements
 
-## Troubleshooting
+## 📝 License
 
-### RAG Not Working
+MIT License - Free to use, modify, and distribute.
 
-1. **Check container logs:**
-   ```bash
-   docker logs youtube-study-buddy
-   ```
+## 🌟 Support
 
-2. **Verify RAG is enabled:**
-   ```bash
-   docker exec youtube-study-buddy printenv RAG_ENABLED
-   ```
+If you find this tool helpful:
+- ⭐ Star the repository
+- 🐛 Report bugs via GitHub Issues
+- 💡 Suggest features or improvements
+- 📢 Share with fellow learners
 
-3. **Run health check:**
-   ```bash
-   ./scripts/check_rag_health.sh
-   ```
+---
 
-### Model Download Failed
-
-If model download fails during build:
-```bash
-# Model will download on first use (fallback)
-# Or manually download:
-docker exec -it youtube-study-buddy python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-mpnet-base-v2')"
-```
-
-### ChromaDB Connection Error
-
-```bash
-# Check directory permissions
-docker exec youtube-study-buddy ls -la /app/.chroma_db
-
-# Reset ChromaDB volume
-./scripts/manage_rag_volumes.sh reset
-
-# Restart containers
-docker-compose restart
-```
-
-### Out of Memory
-
-If container runs out of memory:
-
-1. **Increase memory limit in docker-compose.yml:**
-   ```yaml
-   deploy:
-     resources:
-       limits:
-         memory: 3G  # Increase from 2G
-   ```
-
-2. **Reduce batch size in .env:**
-   ```bash
-   RAG_BATCH_SIZE=16  # Reduce from 32
-   ```
-
-3. **Use smaller model:**
-   ```bash
-   RAG_MODEL=all-MiniLM-L6-v2  # Smaller but less accurate
-   ```
-
-## Migration from Non-RAG Setup
-
-If you have existing notes from before RAG:
-
-1. **Enable RAG in .env:**
-   ```bash
-   RAG_ENABLED=true
-   ```
-
-2. **Run migration script:**
-   ```bash
-   docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes
-   ```
-
-3. **Verify indexing:**
-   ```bash
-   ./scripts/check_rag_health.sh --verbose
-   ```
-
-See `scripts/migrate_notes_to_rag.py --help` for options.
-
-### Migration Script Options
-
-```bash
-# Dry run (preview what will be indexed)
-docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --dry-run
-
-# Index specific subject only
-docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --subject AI
-
-# Resume from checkpoint (if interrupted)
-docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --resume
-
-# Batch size (default: 10)
-docker exec youtube-study-buddy python scripts/migrate_notes_to_rag.py --notes-dir /app/notes --batch-size 20
-```
-
-## RAG Management & Evaluation
-
-### Interactive Query Tool
-
-Test RAG queries interactively with the REPL tool:
-
-```bash
-docker exec -it youtube-study-buddy python scripts/query_rag_interactive.py --notes-dir /app/notes
-```
-
-Commands available in the REPL:
-- Basic query: `How do neural networks learn?`
-- Subject filter: `subject:AI backpropagation`
-- Global search: `global gradient descent`
-- Show stats: `stats`
-- Export results: `export results.json`
-- Help: `help`
-- Quit: `quit`
-
-### Evaluate RAG Quality
-
-Compare RAG semantic search against fuzzy matching:
-
-```bash
-# Quick evaluation (10 test queries)
-docker exec youtube-study-buddy python scripts/evaluate_rag.py --notes-dir /app/notes --quick
-
-# Full evaluation with comparison (50 queries)
-docker exec youtube-study-buddy python scripts/evaluate_rag.py --notes-dir /app/notes --compare
-
-# Save detailed report
-docker exec youtube-study-buddy python scripts/evaluate_rag.py --notes-dir /app/notes --report-file /app/evaluation.json
-docker cp youtube-study-buddy:/app/evaluation.json ./evaluation.json
-```
-
-Metrics reported:
-- Precision@1, @5, @10 (how relevant are the top results)
-- Query latency (p50, p95, p99)
-- Average similarity scores
-- RAG vs fuzzy improvement comparison
-
-### Vector Store Maintenance
-
-Perform maintenance operations on the RAG vector store:
-
-```bash
-# Show collection statistics
-docker exec youtube-study-buddy python scripts/maintain_vector_store.py --stats
-
-# Run health diagnostics
-docker exec youtube-study-buddy python scripts/maintain_vector_store.py --diagnose
-
-# Clean stale entries (deleted notes)
-docker exec youtube-study-buddy python scripts/maintain_vector_store.py --clean --notes-dir /app/notes
-
-# Export for backup
-docker exec youtube-study-buddy python scripts/maintain_vector_store.py --export /app/backup.json
-docker cp youtube-study-buddy:/app/backup.json ./backup.json
-
-# Import from backup
-docker cp ./backup.json youtube-study-buddy:/app/backup.json
-docker exec youtube-study-buddy python scripts/maintain_vector_store.py --import /app/backup.json
-
-# Rebuild from scratch (requires confirmation)
-docker exec -it youtube-study-buddy python scripts/maintain_vector_store.py --rebuild --notes-dir /app/notes
-```
-
-See [scripts/README.md](scripts/README.md) for detailed documentation of all scripts.
-
-## Worktree Information
-
-This is a git worktree for the `feature/rag-cross-reference` branch.
-
-**Coordinated Agent Tasks:**
-- See `COORDINATED_AGENT_TASKS.md` for multi-agent implementation plan
-- Agent 4 (Docker Configuration) completed
-- Other agents handle core infrastructure, pipeline integration, etc.
-
-**When done:**
-```bash
-cd /home/justin/Documents/dev/python/PycharmProjects/ytstudybuddy
-git worktree remove ../rag-worktree
-git branch -d feature/rag-cross-reference  # After merging to main
-```
-
-## Documentation
-
-- [COORDINATED_AGENT_TASKS.md](COORDINATED_AGENT_TASKS.md) - Multi-agent implementation plan
-- [docs/rag-research.md](docs/rag-research.md) - Vector DB comparison
-- [docs/rag-design.md](docs/rag-design.md) - Architecture design
-- [docs/rag-integration.md](docs/rag-integration.md) - Integration roadmap
-- Main project README - Complete feature documentation
+**Built for learners, by learners.** Transform your YouTube learning from passive watching to active knowledge building.

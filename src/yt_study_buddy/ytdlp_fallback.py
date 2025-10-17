@@ -109,36 +109,99 @@ class YtDlpFallback:
         """
         import requests
 
-        # Try VTT format first (simple text format, easier to parse)
+        # Separate VTT formats into direct API URLs and M3U playlists
+        # Prefer direct API URLs as they're simpler to parse
+        direct_vtt = []
+        m3u_vtt = []
+
         for fmt in subtitle_formats:
             if fmt.get('ext') == 'vtt':
-                try:
-                    subtitle_url = fmt.get('url')
-                    if not subtitle_url:
-                        continue
+                url = fmt.get('url', '')
+                if 'manifest.googlevideo.com' in url or 'hls_timedtext_playlist' in url:
+                    m3u_vtt.append(fmt)
+                else:
+                    direct_vtt.append(fmt)
 
-                    # Download VTT file
-                    response = requests.get(subtitle_url, timeout=30)
-                    if response.status_code == 200:
-                        vtt_content = response.text
-
-                        # Parse VTT format - extract text lines only
-                        text_parts = []
-                        for line in vtt_content.split('\n'):
-                            line = line.strip()
-                            # Skip empty lines, timestamps, and WEBVTT header
-                            if line and not line.startswith('WEBVTT') and not '-->' in line and not line.isdigit():
-                                # Skip cue identifiers (lines that are just numbers)
-                                if not re.match(r'^\d+$', line):
-                                    text_parts.append(line)
-
-                        if text_parts:
-                            return ' '.join(text_parts)
-                except Exception as e:
-                    print(f"  Failed to extract from VTT: {e}")
+        # Try direct VTT URLs first, then M3U playlists as fallback
+        for fmt in direct_vtt + m3u_vtt:
+            try:
+                subtitle_url = fmt.get('url')
+                if not subtitle_url:
                     continue
 
+                # Download VTT file (or M3U playlist)
+                response = requests.get(subtitle_url, timeout=30)
+                if response.status_code == 200:
+                    content = response.text
+
+                    # Check if it's an M3U playlist instead of direct VTT
+                    if content.startswith('#EXTM3U'):
+                        # Parse M3U playlist to get VTT segment URLs
+                        text_parts = self._parse_m3u_playlist(content)
+                        if text_parts:
+                            return ' '.join(text_parts)
+                    else:
+                        # Direct VTT content - parse it
+                        text_parts = self._parse_vtt_content(content)
+                        if text_parts:
+                            return ' '.join(text_parts)
+            except Exception as e:
+                print(f"  Failed to extract from VTT: {e}")
+                continue
+
         return None
+
+    def _parse_vtt_content(self, vtt_content: str) -> List[str]:
+        """
+        Parse VTT content and extract text lines.
+
+        Args:
+            vtt_content: VTT file content
+
+        Returns:
+            List of text lines
+        """
+        text_parts = []
+        for line in vtt_content.split('\n'):
+            line = line.strip()
+            # Skip empty lines, timestamps, and WEBVTT header
+            if line and not line.startswith('WEBVTT') and not '-->' in line and not line.isdigit():
+                # Skip cue identifiers (lines that are just numbers)
+                if not re.match(r'^\d+$', line):
+                    text_parts.append(line)
+        return text_parts
+
+    def _parse_m3u_playlist(self, m3u_content: str) -> List[str]:
+        """
+        Parse M3U playlist, download VTT segments, and extract text.
+
+        Args:
+            m3u_content: M3U playlist content
+
+        Returns:
+            List of text lines from all segments
+        """
+        import requests
+
+        text_parts = []
+
+        # Extract VTT segment URLs from M3U playlist
+        for line in m3u_content.split('\n'):
+            line = line.strip()
+            # Skip M3U directives (lines starting with #)
+            if line and not line.startswith('#'):
+                # This is a segment URL
+                try:
+                    response = requests.get(line, timeout=30)
+                    if response.status_code == 200:
+                        # Parse VTT segment
+                        segment_text = self._parse_vtt_content(response.text)
+                        text_parts.extend(segment_text)
+                except Exception as e:
+                    print(f"  Failed to download M3U segment {line[:50]}...: {e}")
+                    continue
+
+        return text_parts
 
     def get_video_title(self, video_id: str) -> str:
         """

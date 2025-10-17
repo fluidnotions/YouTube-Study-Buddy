@@ -51,6 +51,68 @@ class StudyNotesGenerator:
             return False
         return True
 
+    def suggest_title(self, transcript: str, max_length: int = 60) -> str:
+        """
+        Generate a concise title from transcript content using Claude.
+
+        Args:
+            transcript: Video transcript text
+            max_length: Maximum title length (default: 60)
+
+        Returns:
+            Suggested title or None if generation fails
+        """
+        if not self.is_ready():
+            return None
+
+        try:
+            # Use faster model for quick title generation
+            model = os.getenv('TITLE_GENERATION_MODEL', 'claude-3-5-haiku-20241022')
+
+            # Truncate transcript if too long (first ~2000 chars usually enough)
+            sample_transcript = transcript[:2000] if len(transcript) > 2000 else transcript
+
+            prompt = f"""Analyze this video transcript excerpt and suggest a clear, descriptive title.
+
+Requirements:
+- Maximum {max_length} characters
+- Describe the main topic/subject
+- Be specific and informative
+- Use title case
+- No quotes or special characters that would break filenames
+- Focus on what the video teaches/discusses
+
+Transcript excerpt:
+{sample_transcript}
+
+Respond with ONLY the title, nothing else."""
+
+            message = self.client.messages.create(
+                model=model,
+                max_tokens=100,  # Short response
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+
+            title = message.content[0].text.strip()
+
+            # Clean title for filename
+            import re
+            title = re.sub(r'[<>:"/\\|?*]', '_', title)
+            title = re.sub(r'\s+', ' ', title).strip()
+
+            # Ensure it's not too long
+            if len(title) > max_length:
+                title = title[:max_length].rsplit(' ', 1)[0]  # Cut at last space
+
+            return title
+
+        except Exception as e:
+            print(f"⚠️  AI title generation failed: {e}")
+            return None
+
     def generate_notes(self, transcript, related_notes=None):
         """Generate study notes from transcript with optional cross-references."""
         if not self.is_ready():

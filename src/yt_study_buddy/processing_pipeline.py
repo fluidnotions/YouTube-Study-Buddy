@@ -71,7 +71,27 @@ def fetch_transcript_and_title(
             # Log title fetch issues but continue processing
             if not title_success and title_error:
                 print(f"    ⚠️  Title fetch failed: {title_error}")
-                print(f"    Continuing with fallback: {job.video_title}")
+                print(f"    ⏳ Attempting AI title generation from transcript...")
+
+                # Try AI-powered title generation
+                try:
+                    from .study_notes_generator import StudyNotesGenerator
+                    temp_generator = StudyNotesGenerator()
+
+                    if temp_generator.is_ready():
+                        ai_title = temp_generator.suggest_title(job.transcript)
+                        if ai_title:
+                            job.video_title = ai_title
+                            print(f"    ✓ AI-generated title: {ai_title}")
+                        else:
+                            print(f"    ⚠️  AI title generation returned None")
+                            print(f"    Continuing with fallback: {job.video_title}")
+                    else:
+                        print(f"    ⚠️  AI service not ready")
+                        print(f"    Continuing with fallback: {job.video_title}")
+                except Exception as ai_error:
+                    print(f"    ⚠️  AI title generation failed: {ai_error}")
+                    print(f"    Continuing with fallback: {job.video_title}")
             else:
                 print(f"    Title: {job.video_title}")
         else:

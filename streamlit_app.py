@@ -21,6 +21,7 @@ src_dir = current_dir / "src"
 sys.path.insert(0, str(src_dir))
 
 from src.yt_study_buddy.app_interface import create_interface, StudyBuddyInterface
+from src.yt_study_buddy.error_classifier import ErrorClassifier, get_error_with_solution
 
 
 def initialize_session_state():
@@ -160,6 +161,20 @@ def load_exit_node_log(base_dir="notes"):
         return {}
 
 
+def load_ip_attempts_log(base_dir="notes"):
+    """Load IP attempts log from JSON file."""
+    log_path = Path(base_dir) / "ip_attempts_log.json"
+    if not log_path.exists():
+        return []
+
+    try:
+        with open(log_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Could not load IP attempts log: {e}")
+        return []
+
+
 def display_processing_log(base_dir="notes"):
     """Display processing log with filtering options."""
     st.subheader("📋 Processing Log")
@@ -225,9 +240,12 @@ def display_processing_log(base_dir="notes"):
             exit_ip = ''
 
             if not job.get('success'):
-                # Get error message (truncated)
+                # Get simplified error message using ErrorClassifier
                 error = job.get('error', 'Unknown error')
-                failure_reason = error[:50] + ('...' if len(error) > 50 else '')
+                failure_reason = ErrorClassifier.classify(error)
+                # Truncate if still too long
+                if len(failure_reason) > 50:
+                    failure_reason = failure_reason[:47] + '...'
 
                 # Get exit IP if available (from transcript_metadata or tor_exit_ip field)
                 metadata = job.get('transcript_metadata', {})
@@ -307,7 +325,13 @@ def display_processing_log(base_dir="notes"):
                         st.write(f"**Output:** `{job['notes_filepath']}`")
 
                 if not job.get('success') and job.get('error'):
-                    st.error(f"**Error:** {job.get('error')}")
+                    # Use ErrorClassifier for cleaner error display
+                    simplified_error = get_error_with_solution(job.get('error'))
+                    st.error(f"**Error:** {simplified_error}")
+
+                    # Show raw error in a collapsed section
+                    with st.expander("🔍 View Full Error Details"):
+                        st.code(job.get('error'), language=None)
 
                 # Show timings if available
                 if job.get('timings'):
@@ -319,6 +343,78 @@ def display_processing_log(base_dir="notes"):
                     with timings_col2:
                         for key, value in list(job['timings'].items())[len(job['timings'])//2:]:
                             st.write(f"  • {key}: {value:.1f}s")
+
+
+def display_ip_attempts_log(base_dir="notes"):
+    """Display IP attempts log with retry tracking."""
+    st.subheader("🔄 IP Retry Attempts")
+
+    attempts = load_ip_attempts_log(base_dir)
+
+    if not attempts:
+        st.info("No IP retry attempts logged yet. Process videos to see retry tracking here!")
+        return
+
+    # Group by jobRef
+    jobs_dict = {}
+    for attempt in attempts:
+        job_ref = attempt.get('jobRef', 'unknown')
+        if job_ref not in jobs_dict:
+            jobs_dict[job_ref] = []
+        jobs_dict[job_ref].append(attempt)
+
+    # Display summary metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Attempts", len(attempts))
+    with col2:
+        st.metric("Unique Videos", len(jobs_dict))
+    with col3:
+        blocked_count = sum(1 for a in attempts if a.get('status') == 'blocked')
+        st.metric("Blocked IPs", blocked_count)
+
+    # Display by job
+    st.subheader("Retry History by Video")
+    for job_ref, job_attempts in jobs_dict.items():
+        # Sort by retry attempt
+        job_attempts.sort(key=lambda x: x.get('retryAttempt', 0))
+
+        # Build summary
+        total_retries = len(job_attempts)
+        unique_ips = set(a.get('ip', 'unknown') for a in job_attempts if a.get('ip') != 'unknown')
+        last_status = job_attempts[-1].get('status', 'unknown')
+
+        status_icon = "❌" if last_status == "blocked" else "✅"
+
+        with st.expander(f"{status_icon} Video `{job_ref}` - {total_retries} attempt(s)"):
+            # Display attempts table
+            attempt_data = []
+            for attempt in job_attempts:
+                retry_num = attempt.get('retryAttempt', 0)
+                ip = attempt.get('ip', 'unknown')
+                method = attempt.get('method', 'unknown')
+                status = attempt.get('status', 'unknown')
+                error = attempt.get('error', '')
+                timestamp = attempt.get('timestamp', 'N/A')
+
+                # Simplify error with ErrorClassifier
+                simple_error = ErrorClassifier.classify(error) if error else '-'
+
+                attempt_data.append({
+                    'Retry #': retry_num,
+                    'IP Address': ip,
+                    'Method': method,
+                    'Status': '❌ Blocked' if status == 'blocked' else '✅ Success',
+                    'Error': simple_error,
+                    'Timestamp': timestamp[:19] if timestamp != 'N/A' else 'N/A'
+                })
+
+            df = pd.DataFrame(attempt_data)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            # Show detailed error for last attempt if blocked
+            if last_status == 'blocked' and job_attempts[-1].get('error'):
+                st.error(f"**Latest Error:** {get_error_with_solution(job_attempts[-1]['error'])}")
 
 
 def display_exit_node_log(base_dir="notes"):
@@ -539,19 +635,52 @@ def main():
 
         st.divider()
 
-    # Main content tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎬 Process Videos", "📊 Results", "📋 Logs", "❓ Help"])
+    # Main content tabs - streamlined to essential tabs only
+    tab1, tab2 = st.tabs(["🎬 Process Videos", "📋 Progress & Logs"])
 
     with tab1:
-        # Quick start hint
+        # Quick start hint with help
         if st.session_state.show_quick_start:
             col1, col2 = st.columns([5, 1])
             with col1:
-                st.info("💡 **First time?** Use recommended settings below, or customize as needed.")
+                st.info("💡 **First time?** Use recommended settings below, or expand 'Quick Help' for guidance.")
             with col2:
                 if st.button("✕", help="Dismiss"):
                     st.session_state.show_quick_start = False
                     st.rerun()
+
+        # Quick Help Section (collapsed by default)
+        with st.expander("❓ Quick Help", expanded=False):
+            st.markdown("""
+            ### 🚀 Getting Started
+
+            1. **Set up your Claude API key** as an environment variable:
+               - `CLAUDE_API_KEY` or `ANTHROPIC_API_KEY`
+               - Get it from [console.anthropic.com](https://console.anthropic.com/)
+
+            2. **Add video URLs**:
+               - **Option A**: Extract from playlist → Enter playlist URL → Click "Extract URLs"
+               - **Option B**: Paste URLs directly (one per line)
+
+            3. **Configure settings** (or use defaults):
+               - **Subject**: Organize notes by topic (optional - auto-categorize if blank)
+               - **Advanced Settings**: Parallel processing for faster batch operations
+
+            4. **Process videos** and monitor progress in the "Progress & Logs" tab
+
+            ### 📁 Output Structure
+            Notes are saved to `./notes/[Subject]/` folders with:
+            - Markdown notes with AI summaries
+            - Learning assessments (if enabled)
+            - PDF exports (if enabled)
+            - Cross-references to related notes
+
+            ### 💡 Tips
+            - **Parallel processing**: Process multiple videos simultaneously (3 workers recommended)
+            - **Auto-categorization**: Leave subject blank for AI-powered organization
+            - **Rate limiting**: The tool automatically retries with different Tor exit nodes if blocked
+            - **Error recovery**: Failed videos show detailed error information in Progress & Logs tab
+            """)
 
         # Processing Settings Section
         st.subheader("⚙️ Processing Settings")
@@ -608,28 +737,33 @@ def main():
                 else:
                     pdf_theme = 'obsidian'
 
-        # Parallel processing settings
-        st.subheader("⚡ Performance Settings")
-        col1, col2 = st.columns(2)
-        with col1:
-            use_parallel = st.checkbox(
-                "🚀 Parallel Processing",
-                value=True,
-                help="Process multiple videos simultaneously for faster batch operations",
-                disabled=st.session_state.processing
-            )
-        with col2:
-            if use_parallel:
-                max_workers = st.slider(
-                    "Workers",
-                    min_value=1,
-                    max_value=5,
-                    value=3,
-                    help="Number of concurrent processing tasks. More workers = faster but higher rate limit risk",
+        # Advanced Settings (collapsed by default)
+        with st.expander("⚡ Advanced Settings", expanded=False):
+            st.markdown("**Performance & Parallel Processing**")
+            st.caption("Configure parallel processing for faster batch operations. More workers = faster processing but higher API rate limit risk.")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                use_parallel = st.checkbox(
+                    "🚀 Enable Parallel Processing",
+                    value=True,
+                    help="Process multiple videos simultaneously",
                     disabled=st.session_state.processing
                 )
-            else:
-                max_workers = 1
+            with col2:
+                if use_parallel:
+                    max_workers = st.slider(
+                        "Concurrent Workers",
+                        min_value=1,
+                        max_value=5,
+                        value=3,
+                        help="Number of concurrent processing tasks (recommended: 3)",
+                        disabled=st.session_state.processing
+                    )
+                else:
+                    max_workers = 1
+
+            st.caption("💡 **Tip**: Start with 3 workers. Reduce if you hit rate limits, increase for faster processing.")
 
         st.divider()
 
@@ -813,28 +947,6 @@ def main():
                     with st.sidebar:
                         display_knowledge_graph_stats(processor)
 
-    with tab2:
-        st.header("📊 Processing Results")
-
-        if st.session_state.processed_videos:
-            st.info(f"Total videos processed this session: {len(st.session_state.processed_videos)}")
-
-            for i, result in enumerate(reversed(st.session_state.processed_videos)):
-                with st.expander(f"📹 {result['title']}"):
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        st.write(f"**URL:** [Link]({result['url']})")
-                        st.write(f"**File:** {result['filename']}")
-                    with col2:
-                        st.metric("Related Notes", result['related_notes'])
-                        st.metric("Transcript Length", f"{result['transcript_length']:,}")
-        else:
-            st.info("No videos processed yet. Use the tabs above to get started!")
-
-        if st.button("🗑️ Clear Results"):
-            st.session_state.processed_videos = []
-            st.rerun()
-
     # Add Knowledge Graph stats to sidebar
     with st.sidebar:
         if st.session_state.processed_videos:
@@ -846,89 +958,23 @@ def main():
             )
             display_knowledge_graph_stats(processor)
 
-    with tab3:
-        st.header("📋 Logs & Monitoring")
+    with tab2:
+        st.header("📋 Progress & Logs")
 
         # Use output_base_dir from sidebar (already defined above)
         base_dir = output_base_dir
 
         # Create subtabs for different log types
-        log_tab1, log_tab2 = st.tabs(["📋 Processing Log", "🌐 Exit Nodes"])
+        log_tab1, log_tab2, log_tab3 = st.tabs(["📋 Processing Log", "🔄 IP Retry Attempts", "🌐 Exit Nodes"])
 
         with log_tab1:
             display_processing_log(base_dir=str(base_dir))
 
         with log_tab2:
+            display_ip_attempts_log(base_dir=str(base_dir))
+
+        with log_tab3:
             display_exit_node_log(base_dir=str(base_dir))
-
-    with tab4:
-        st.header("❓ Help & Information")
-
-        st.markdown("""
-        ### 🚀 Getting Started
-
-        1. **Set up your Claude API key** as an environment variable:
-           - `CLAUDE_API_KEY` or `ANTHROPIC_API_KEY`
-           - Get it from [console.anthropic.com](https://console.anthropic.com/)
-
-        2. **Configure processing settings** in the "Process Videos" tab:
-           - **Subject**: Organize notes by topic (optional - leave blank for auto-categorization)
-           - **Global cross-referencing**: Find connections across all subjects
-           - **Transcript method**: Choose API, Scraper, or Tor
-           - **Assessments**: Generate learning questions alongside notes
-           - **Auto-categorize**: Automatically detect and organize by subject
-
-        3. **Add video URLs**:
-           - **Option A - Extract from playlist**: Enter playlist URL → Click "Extract URLs"
-           - **Option B - Manual entry**: Paste URLs directly into the text area (one per line)
-           - **Tip**: You can mix both methods - extract playlist then edit the list
-
-        4. **Process and view results**:
-           - Click "🚀 Process Videos" to start
-           - View progress and results in the "Results" tab
-           - Files are saved to `notes/[Subject]/` folders
-
-        ### 📁 Output Structure
-
-        Notes are saved in organized folders:
-        ```
-        notes/
-        ├── [Subject Name]/
-        │   ├── video1_notes.md
-        │   └── video2_notes.md
-        └── [Another Subject]/
-            └── video3_notes.md
-        ```
-
-        ### 🔗 Features
-
-        - **AI-powered summarization** using Claude Sonnet 4.5
-        - **Learning assessments** with gap analysis and application questions
-        - **Auto-categorization** using ML-based subject detection
-        - **Playlist extraction** using yt-dlp for batch processing
-        - **Cross-referencing** between related notes
-        - **Obsidian integration** with automatic [[links]]
-        - **Knowledge graph** for concept tracking
-        - **Tor-based fetching** for reliable transcript access
-
-        ### 💡 Tips
-
-        - **Playlist processing**: Use the playlist extractor to quickly get all URLs from a YouTube playlist
-        - **Auto-categorization**: Leave subject blank and enable auto-categorize to let AI organize your notes
-        - **Assessments**: Enable assessments to get learning questions that test deeper understanding
-        - **Cross-referencing**: Global finds connections across all subjects, subject-only stays focused
-        - **Tor method**: For best results with rate limiting, use Tor with the tor-proxy container
-        - The tool automatically adds delays between batch requests to avoid rate limiting
-
-        ### 📦 Dependencies for Playlist Extraction
-
-        Install yt-dlp to enable playlist URL extraction:
-        ```bash
-        pip install yt-dlp
-        # or
-        uv pip install yt-dlp
-        ```
-        """)
 
 
 if __name__ == "__main__":

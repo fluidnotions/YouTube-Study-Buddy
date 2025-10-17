@@ -35,8 +35,13 @@ class VideoProcessor:
                 return match.group(1)
         return None
 
-    def get_video_title(self, video_id: str) -> str:
-        """Get video title using the configured provider."""
+    def get_video_title(self, video_id: str, worker_id=None) -> str:
+        """Get video title using the configured provider.
+
+        Args:
+            video_id: YouTube video ID
+            worker_id: Optional worker ID for logging/debugging (not used by provider)
+        """
         return self.provider.get_video_title(video_id)
 
     def get_transcript(self, video_id: str) -> dict:

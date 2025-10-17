@@ -203,6 +203,16 @@ class VideoProcessingJob:
 
         Includes all state, metadata, errors, and file paths.
         """
+        # Extract only JSON-serializable fields from transcript_data
+        transcript_metadata = None
+        if self.transcript_data:
+            transcript_metadata = {
+                'duration': self.transcript_data.get('duration'),
+                'length': self.transcript_data.get('length'),
+                'method': self.transcript_data.get('method'),
+                # Skip 'segments' as they contain FetchedTranscriptSnippet objects
+            }
+
         return {
             # Input
             'video_id': self.video_id,
@@ -213,7 +223,7 @@ class VideoProcessingJob:
             # Stage 1: Transcript
             'video_title': self.video_title,
             'transcript': self.transcript,
-            'transcript_metadata': self.transcript_data,
+            'transcript_metadata': transcript_metadata,
 
             # Stage 2: Generated content
             'has_notes': self.has_notes(),

@@ -21,6 +21,7 @@ from .ytdlp_fallback import YtDlpFallback
 from .debug_logger import get_logger
 from .exit_node_tracker import get_tracker
 from .error_classifier import simplify_error
+from .ip_tracker import get_ip_tracker
 
 
 class TorExitNodePool:
@@ -555,10 +556,11 @@ class TorTranscriptFetcher:
         max_retries: int = 5,
         base_timeout: int = 60,
         max_timeout: int = 120,
-        check_availability: bool = True
+        check_availability: bool = True,
+        ytdlp_fallback_after: int = 3  # Try ytdlp after this many failed Tor attempts
     ) -> Optional[Dict[str, Any]]:
         """
-        Fetch transcript using Tor proxy with enhanced retry mechanism.
+        Fetch transcript using Tor proxy with enhanced retry mechanism and early ytdlp fallback.
 
         Args:
             video_id: YouTube video ID
@@ -567,6 +569,7 @@ class TorTranscriptFetcher:
             base_timeout: Base timeout in seconds (default: 60)
             max_timeout: Maximum timeout in seconds (default: 120)
             check_availability: Quick check before fetching (default: True)
+            ytdlp_fallback_after: Try ytdlp after this many failed Tor attempts (default: 3)
 
         Returns:
             Dictionary with transcript data or None if failed
@@ -579,9 +582,24 @@ class TorTranscriptFetcher:
                 return None
 
         last_error = None
+        ip_tracker = get_ip_tracker()
+        current_ip = None  # Initialize outside the loop
 
         for attempt in range(max_retries):
             try:
+                # Get current exit IP before attempting fetch
+                try:
+                    response = self.session.get(
+                        'https://api.ipify.org',
+                        proxies=self.proxies,
+                        timeout=10
+                    )
+                    current_ip = response.text.strip()
+                    print(f"📍 Using Tor exit IP: {current_ip} (attempt {attempt + 1}/{max_retries})")
+                except Exception as ip_err:
+                    print(f"⚠️  Could not get exit IP: {ip_err}")
+                    current_ip = "unknown"
+
                 # Rotate circuit on retries (not on first attempt)
                 if attempt > 1:
                     print(f"Retry attempt {attempt + 1}/{max_retries}...")
@@ -638,6 +656,16 @@ class TorTranscriptFetcher:
                     duration_minutes = int(duration_seconds / 60)
                     duration_info = f"~{duration_minutes} minutes"
 
+                # Log successful attempt
+                if current_ip:
+                    ip_tracker.log_attempt(
+                        ip=current_ip,
+                        status="success",
+                        job_ref=video_id,
+                        retry_attempt=attempt + 1,
+                        method="tor"
+                    )
+
                 print(f"✓ Successfully fetched transcript on attempt {attempt + 1}")
                 return {
                     'transcript': transcript_text,
@@ -651,6 +679,37 @@ class TorTranscriptFetcher:
                 last_error = e
                 simplified = "Connection timeout"
                 print(f"✗ {simplified} on attempt {attempt + 1}")
+
+                # Log failed attempt
+                if current_ip:
+                    ip_tracker.log_attempt(
+                        ip=current_ip,
+                        status="failed",
+                        job_ref=video_id,
+                        retry_attempt=attempt + 1,
+                        error=simplified,
+                        method="tor"
+                    )
+
+                # Check if we should try ytdlp fallback early
+                if attempt + 1 >= ytdlp_fallback_after and attempt + 1 < max_retries:
+                    print(f"⚠️  {attempt + 1} Tor attempts failed. Trying yt-dlp fallback...")
+                    ytdlp_result = self.ytdlp_fallback.fetch_transcript(video_id, languages)
+                    if ytdlp_result:
+                        print("✓ Successfully fetched via yt-dlp fallback")
+                        # Log ytdlp success
+                        ip_tracker.log_attempt(
+                            ip="N/A",
+                            status="success",
+                            job_ref=video_id,
+                            retry_attempt=attempt + 1,
+                            method="ytdlp"
+                        )
+                        ytdlp_result['method'] = 'yt-dlp'
+                        return ytdlp_result
+                    else:
+                        print("✗ YT-DLP fallback also failed, continuing Tor retries...")
+
                 if attempt >= max_retries - 1:
                     print(f"✗ All {max_retries} attempts timed out")
 
@@ -659,6 +718,36 @@ class TorTranscriptFetcher:
                 # Simplify verbose YouTube errors
                 simplified = simplify_error(str(e))
                 print(f"✗ {simplified} (attempt {attempt + 1})")
+
+                # Log failed attempt
+                if current_ip:
+                    ip_tracker.log_attempt(
+                        ip=current_ip,
+                        status="blocked" if "blocked" in simplified.lower() else "failed",
+                        job_ref=video_id,
+                        retry_attempt=attempt + 1,
+                        error=simplified,
+                        method="tor"
+                    )
+
+                # Check if we should try ytdlp fallback early
+                if attempt + 1 >= ytdlp_fallback_after and attempt + 1 < max_retries:
+                    print(f"⚠️  {attempt + 1} Tor attempts failed. Trying yt-dlp fallback...")
+                    ytdlp_result = self.ytdlp_fallback.fetch_transcript(video_id, languages)
+                    if ytdlp_result:
+                        print("✓ Successfully fetched via yt-dlp fallback")
+                        # Log ytdlp success
+                        ip_tracker.log_attempt(
+                            ip="N/A",
+                            status="success",
+                            job_ref=video_id,
+                            retry_attempt=attempt + 1,
+                            method="ytdlp"
+                        )
+                        ytdlp_result['method'] = 'yt-dlp'
+                        return ytdlp_result
+                    else:
+                        print("✗ YT-DLP fallback also failed, continuing Tor retries...")
 
                 if attempt >= max_retries - 1:
                     print(f"✗ All {max_retries} attempts failed")

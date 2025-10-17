@@ -51,7 +51,7 @@ services:
           memory: 1G
 
   tor-proxy:
-    image: dperson/torproxy:latest
+    image: osminogin/tor-simple:latest
     container_name: ytstudybuddy-tor-proxy-dev
     restart: unless-stopped
     environment:

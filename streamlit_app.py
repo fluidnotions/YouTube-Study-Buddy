@@ -17,7 +17,7 @@ current_dir = Path(__file__).parent
 src_dir = current_dir / "src"
 sys.path.insert(0, str(src_dir))
 
-from src.yt_study_buddy.cli import YouTubeStudyNotes
+from src.yt_study_buddy.app_interface import create_interface, StudyBuddyInterface
 
 
 def initialize_session_state():
@@ -34,16 +34,18 @@ def initialize_session_state():
         st.session_state.show_quick_start = True
 
 
-def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="notes", parallel=False, max_workers=3):
+def create_processor(subject, global_context, generate_assessments=True, auto_categorize=True, base_dir="notes", parallel=False, max_workers=3, export_pdf=False, pdf_theme='obsidian'):
     """Create or update the YouTube processor based on settings."""
-    return YouTubeStudyNotes(
+    return create_interface(
         subject=subject if subject else None,
         global_context=global_context,
         base_dir=base_dir,
         generate_assessments=generate_assessments,
         auto_categorize=auto_categorize,
         parallel=parallel,
-        max_workers=max_workers
+        max_workers=max_workers,
+        export_pdf=export_pdf,
+        pdf_theme=pdf_theme
     )
 
 
@@ -106,7 +108,12 @@ def display_knowledge_graph_stats(processor):
     with st.sidebar:
         st.subheader("📊 Knowledge Graph Stats")
         try:
-            stats = processor.knowledge_graph.get_stats()
+            stats = processor.get_knowledge_graph_stats()
+
+            if 'error' in stats:
+                st.error(f"Could not load stats: {stats['error']}")
+                return
+
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Total Notes", stats['total_notes'])
@@ -166,97 +173,38 @@ def validate_urls(url_text):
     return valid_urls, None
 
 
-def process_single_video(url, processor, progress_container):
+def process_single_video(url, processor, progress_container, worker_id=0):
     """Process a single YouTube video with progress tracking."""
     with progress_container:
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        # Extract video ID
-        status_text.text("🔍 Extracting video ID...")
-        progress_bar.progress(10)
-
-        video_id = processor.video_processor.get_video_id(url)
-        if not video_id:
-            st.error(f"❌ Invalid YouTube URL: {url}")
-            return False
-
-        # Get transcript
-        status_text.text("📄 Fetching transcript...")
-        progress_bar.progress(30)
-
         try:
-            transcript_data = processor.video_processor.get_transcript(video_id)
-            transcript = transcript_data['transcript']
+            # Process using interface
+            status_text.text("🔍 Processing video...")
+            progress_bar.progress(10)
 
-            # Get video title
-            status_text.text("📝 Getting video title...")
-            progress_bar.progress(50)
+            result = processor.process_video(url, worker_id=worker_id)
 
-            video_title = processor.video_processor.get_video_title(video_id)
-
-            # Find related notes
-            status_text.text("🔗 Finding related notes...")
-            progress_bar.progress(70)
-
-            related_notes = processor.knowledge_graph.find_related_notes(transcript)
-
-            # Generate study notes
-            status_text.text("🤖 Generating study notes with Claude...")
-            progress_bar.progress(85)
-
-            if not processor.notes_generator.is_ready():
-                st.error("❌ Claude API not ready. Check your API key.")
+            if not result.success:
+                st.error(f"❌ Error: {result.error}")
                 return False
-
-            study_notes = processor.notes_generator.generate_notes(transcript, related_notes)
-            if not study_notes:
-                st.error("❌ Failed to generate study notes")
-                return False
-
-            # Save to file
-            status_text.text("💾 Saving study notes...")
-            progress_bar.progress(95)
-
-            os.makedirs(processor.output_dir, exist_ok=True)
-            original_url = f"https://www.youtube.com/watch?v={video_id}"
-            filename = processor.notes_generator.create_markdown_file(
-                video_title, original_url, study_notes, processor.output_dir, video_id
-            )
-
-            # Add Obsidian links
-            processor.obsidian_linker.process_file(filename)
-            processor.knowledge_graph.refresh_cache()
-
-            # Generate assessment if enabled
-            if processor.assessment_generator:
-                try:
-                    status_text.text("📝 Generating assessment...")
-                    assessment_content = processor.assessment_generator.generate_assessment(
-                        transcript, study_notes, video_title, original_url
-                    )
-                    assessment_filename = processor.assessment_generator.create_assessment_filename(video_title)
-                    assessment_path = os.path.join(processor.output_dir, assessment_filename)
-
-                    with open(assessment_path, 'w', encoding='utf-8') as f:
-                        f.write(assessment_content)
-                except Exception as e:
-                    st.warning(f"⚠️ Assessment generation failed: {e}")
 
             progress_bar.progress(100)
             status_text.text("✅ Successfully processed!")
 
-            # Store result
-            result = {
-                'title': video_title,
-                'url': original_url,
-                'filename': filename,
-                'related_notes': len(related_notes),
-                'transcript_length': transcript_data['length']
+            # Store result for UI
+            ui_result = {
+                'title': result.video_title,
+                'url': result.url,
+                'filename': str(result.notes_filepath) if result.notes_filepath else None,
+                'related_notes': result.related_notes_count,
+                'transcript_length': result.transcript_length,
+                'pdf_exported': result.notes_pdf_path is not None
             }
-            st.session_state.processed_videos.append(result)
+            st.session_state.processed_videos.append(ui_result)
 
-            return result
+            return ui_result
 
         except Exception as e:
             st.error(f"❌ Error processing video: {e}")
@@ -336,7 +284,7 @@ def main():
             )
 
         with col2:
-            # Transcript provider is now Tor-only (no selector needed)
+            # Feature toggles in 2x2 grid
             col2a, col2b = st.columns(2)
             with col2a:
                 generate_assessments = st.checkbox(
@@ -345,13 +293,30 @@ def main():
                     help="Generate learning questions",
                     disabled=st.session_state.processing
                 )
-            with col2b:
                 auto_categorize = st.checkbox(
                     "🏷️ Auto-categorize",
                     value=True,
                     help="Auto-detect subject (when blank)",
                     disabled=st.session_state.processing
                 )
+            with col2b:
+                export_pdf = st.checkbox(
+                    "📄 Export PDF",
+                    value=False,
+                    help="Export notes and assessments to PDF",
+                    disabled=st.session_state.processing
+                )
+                if export_pdf:
+                    pdf_theme = st.selectbox(
+                        "PDF Theme",
+                        options=['obsidian', 'academic', 'minimal', 'default'],
+                        index=0,
+                        help="Choose PDF styling theme",
+                        disabled=st.session_state.processing,
+                        label_visibility="collapsed"
+                    )
+                else:
+                    pdf_theme = 'obsidian'
 
         # Parallel processing settings
         st.subheader("⚡ Performance Settings")
@@ -480,7 +445,9 @@ def main():
                         auto_categorize and not subject,
                         base_dir=output_base_dir,
                         parallel=use_parallel,
-                        max_workers=max_workers
+                        max_workers=max_workers,
+                        export_pdf=export_pdf,
+                        pdf_theme=pdf_theme
                     )
 
                     # Switch to Results tab by rerunning with active tab

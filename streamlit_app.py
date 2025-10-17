@@ -220,14 +220,30 @@ def display_processing_log(base_dir="notes"):
     if filtered_jobs:
         df_data = []
         for job in filtered_jobs:
+            # Extract failure info
+            failure_reason = ''
+            exit_ip = ''
+
+            if not job.get('success'):
+                # Get error message (truncated)
+                error = job.get('error', 'Unknown error')
+                failure_reason = error[:50] + ('...' if len(error) > 50 else '')
+
+                # Get exit IP if available (from transcript_metadata or tor_exit_ip field)
+                metadata = job.get('transcript_metadata', {})
+                if metadata and isinstance(metadata, dict):
+                    exit_ip = metadata.get('tor_exit_ip', metadata.get('exit_ip', ''))
+
             df_data.append({
                 'Status': '✅' if job.get('success') else '❌',
                 'Video ID': job.get('video_id', 'unknown'),
-                'Title': job.get('title', 'N/A')[:40] + ('...' if len(job.get('title', '')) > 40 else ''),
-                'Method': job.get('method', 'unknown'),
+                'Title': job.get('video_title', job.get('title', 'N/A'))[:40] + ('...' if len(job.get('video_title', job.get('title', ''))) > 40 else ''),
+                'Method': job.get('transcript_metadata', {}).get('method', 'unknown') if job.get('transcript_metadata') else 'unknown',
                 'Duration (s)': f"{job.get('processing_duration', 0):.1f}",
+                'Exit IP': exit_ip if exit_ip else 'N/A',
+                'Failure Reason': failure_reason if failure_reason else '-',
                 'Worker': job.get('worker_id', 'N/A'),
-                'Timestamp': job.get('timestamp', 'N/A')[:19] if job.get('timestamp') else 'N/A'
+                'Timestamp': job.get('logged_at', job.get('timestamp', 'N/A'))[:19] if job.get('logged_at') or job.get('timestamp') else 'N/A'
             })
 
         df = pd.DataFrame(df_data)
@@ -237,7 +253,7 @@ def display_processing_log(base_dir="notes"):
         st.subheader("Job Details")
         for i, job in enumerate(filtered_jobs[:20]):  # Limit to 20 most relevant
             status_icon = '✅' if job.get('success') else '❌'
-            title = job.get('title', job.get('video_id', 'Unknown'))
+            title = job.get('video_title', job.get('title', job.get('video_id', 'Unknown')))
 
             with st.expander(f"{status_icon} {title[:60]}"):
                 col1, col2 = st.columns(2)
@@ -245,15 +261,42 @@ def display_processing_log(base_dir="notes"):
                 with col1:
                     st.write(f"**Video ID:** {job.get('video_id', 'N/A')}")
                     st.write(f"**Status:** {'Success' if job.get('success') else 'Failed'}")
-                    st.write(f"**Method:** {job.get('method', 'unknown')}")
+
+                    # Get method from transcript_metadata
+                    method = 'unknown'
+                    exit_ip = 'N/A'
+                    if job.get('transcript_metadata'):
+                        metadata = job['transcript_metadata']
+                        method = metadata.get('method', 'unknown')
+                        exit_ip = metadata.get('tor_exit_ip', metadata.get('exit_ip', 'N/A'))
+
+                    st.write(f"**Method:** {method}")
+                    if exit_ip != 'N/A':
+                        st.write(f"**Exit IP:** {exit_ip}")
+
                     st.write(f"**Worker:** {job.get('worker_id', 'N/A')}")
+
+                    # Show retry info if available
+                    if job.get('retry_count', 0) > 0:
+                        st.write(f"**Retries:** {job.get('retry_count')}")
 
                 with col2:
                     st.write(f"**Duration:** {job.get('processing_duration', 0):.1f}s")
-                    st.write(f"**Timestamp:** {job.get('timestamp', 'N/A')[:19]}")
 
-                    if job.get('filepath'):
-                        st.write(f"**Output:** `{job.get('filepath')}`")
+                    # Show both timestamps
+                    if job.get('logged_at'):
+                        st.write(f"**Logged:** {job['logged_at'][:19]}")
+                    elif job.get('timestamp'):
+                        st.write(f"**Timestamp:** {job['timestamp'][:19]}")
+
+                    # Show failure time specifically
+                    if not job.get('success') and job.get('end_time'):
+                        from datetime import datetime
+                        failure_time = datetime.fromtimestamp(job['end_time'])
+                        st.write(f"**Failed at:** {failure_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+                    if job.get('notes_filepath'):
+                        st.write(f"**Output:** `{job['notes_filepath']}`")
 
                 if not job.get('success') and job.get('error'):
                     st.error(f"**Error:** {job.get('error')}")
@@ -432,6 +475,28 @@ def main():
     )
 
     initialize_session_state()
+
+    # Custom CSS to remove dark overlay on readonly tabs
+    st.markdown("""
+        <style>
+        /* Remove dark mask/overlay from disabled elements in tabs */
+        .stTabs [data-baseweb="tab-panel"] [disabled] {
+            opacity: 1 !important;
+        }
+
+        /* Keep text readable in readonly sections */
+        .stTabs [data-baseweb="tab-panel"] [disabled] * {
+            opacity: 1 !important;
+            color: inherit !important;
+        }
+
+        /* Ensure dataframes and expanders are visible */
+        .stTabs [data-baseweb="tab-panel"] .stDataFrame,
+        .stTabs [data-baseweb="tab-panel"] .stExpander {
+            opacity: 1 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     st.title("📚 YouTube Study Buddy")
     st.markdown("Transform YouTube videos into organized study notes with AI-powered cross-referencing")

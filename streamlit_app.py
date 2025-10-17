@@ -592,7 +592,7 @@ def main():
             with col2b:
                 export_pdf = st.checkbox(
                     "📄 Export PDF",
-                    value=False,
+                    value=True,
                     help="Export notes and assessments to PDF",
                     disabled=st.session_state.processing
                 )
@@ -753,6 +753,7 @@ def main():
 
                     overall_progress = st.progress(0)
                     overall_status = st.empty()
+                    error_display = st.container()
 
                     if use_parallel:
                         # Parallel processing using the CLI's built-in method
@@ -773,6 +774,15 @@ def main():
                         # Count successful jobs for these videos
                         video_ids = [processor.validate_video_url(url)[0] for url in valid_urls]
                         successful = sum(1 for job in all_jobs if job.get('video_id') in video_ids and job.get('success'))
+
+                        # Display errors from failed jobs
+                        failed_jobs = [job for job in all_jobs if job.get('video_id') in video_ids and not job.get('success')]
+                        if failed_jobs:
+                            with error_display:
+                                for job in failed_jobs:
+                                    video_title = job.get('video_title') or job.get('video_id', 'Unknown')
+                                    error_msg = job.get('error', 'Unknown error')
+                                    st.error(f"❌ **{video_title}**: {error_msg}")
                     else:
                         # Sequential processing
                         successful = 0

@@ -8,7 +8,10 @@ import os
 import subprocess
 import sys
 import time
+import json
+import pandas as pd
 from pathlib import Path
+from datetime import datetime, timedelta
 
 import streamlit as st
 
@@ -127,6 +130,216 @@ def display_knowledge_graph_stats(processor):
                         st.write(f"• {subject}")
         except Exception as e:
             st.error(f"Could not load stats: {e}")
+
+
+def load_processing_log(base_dir="notes"):
+    """Load processing log from JSON file."""
+    log_path = Path(base_dir) / "processing_log.json"
+    if not log_path.exists():
+        return []
+
+    try:
+        with open(log_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Could not load processing log: {e}")
+        return []
+
+
+def load_exit_node_log(base_dir="notes"):
+    """Load exit node tracker log from JSON file."""
+    log_path = Path(base_dir) / "exit_nodes.json"
+    if not log_path.exists():
+        return {}
+
+    try:
+        with open(log_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Could not load exit node log: {e}")
+        return {}
+
+
+def display_processing_log(base_dir="notes"):
+    """Display processing log with filtering options."""
+    st.subheader("📋 Processing Log")
+
+    jobs = load_processing_log(base_dir)
+
+    if not jobs:
+        st.info("No processing jobs found. Process some videos to see them here!")
+        return
+
+    # Filter controls
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        status_filter = st.selectbox(
+            "Status",
+            ["All", "Success", "Failed"],
+            key="log_status_filter"
+        )
+
+    with col2:
+        method_filter = st.selectbox(
+            "Method",
+            ["All", "tor", "yt-dlp", "unknown"],
+            key="log_method_filter"
+        )
+
+    with col3:
+        sort_by = st.selectbox(
+            "Sort by",
+            ["Newest First", "Oldest First", "Duration (Longest)", "Duration (Shortest)"],
+            key="log_sort"
+        )
+
+    # Apply filters
+    filtered_jobs = jobs
+
+    if status_filter != "All":
+        filtered_jobs = [j for j in filtered_jobs if j.get('success') == (status_filter == "Success")]
+
+    if method_filter != "All":
+        filtered_jobs = [j for j in filtered_jobs if j.get('method', 'unknown') == method_filter]
+
+    # Sort
+    if sort_by == "Newest First":
+        filtered_jobs = sorted(filtered_jobs, key=lambda x: x.get('timestamp', ''), reverse=True)
+    elif sort_by == "Oldest First":
+        filtered_jobs = sorted(filtered_jobs, key=lambda x: x.get('timestamp', ''))
+    elif sort_by == "Duration (Longest)":
+        filtered_jobs = sorted(filtered_jobs, key=lambda x: x.get('processing_duration', 0), reverse=True)
+    elif sort_by == "Duration (Shortest)":
+        filtered_jobs = sorted(filtered_jobs, key=lambda x: x.get('processing_duration', 0))
+
+    # Display summary
+    st.info(f"Showing {len(filtered_jobs)} of {len(jobs)} jobs")
+
+    # Create DataFrame for display
+    if filtered_jobs:
+        df_data = []
+        for job in filtered_jobs:
+            df_data.append({
+                'Status': '✅' if job.get('success') else '❌',
+                'Video ID': job.get('video_id', 'unknown'),
+                'Title': job.get('title', 'N/A')[:40] + ('...' if len(job.get('title', '')) > 40 else ''),
+                'Method': job.get('method', 'unknown'),
+                'Duration (s)': f"{job.get('processing_duration', 0):.1f}",
+                'Worker': job.get('worker_id', 'N/A'),
+                'Timestamp': job.get('timestamp', 'N/A')[:19] if job.get('timestamp') else 'N/A'
+            })
+
+        df = pd.DataFrame(df_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Detailed view expanders
+        st.subheader("Job Details")
+        for i, job in enumerate(filtered_jobs[:20]):  # Limit to 20 most relevant
+            status_icon = '✅' if job.get('success') else '❌'
+            title = job.get('title', job.get('video_id', 'Unknown'))
+
+            with st.expander(f"{status_icon} {title[:60]}"):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.write(f"**Video ID:** {job.get('video_id', 'N/A')}")
+                    st.write(f"**Status:** {'Success' if job.get('success') else 'Failed'}")
+                    st.write(f"**Method:** {job.get('method', 'unknown')}")
+                    st.write(f"**Worker:** {job.get('worker_id', 'N/A')}")
+
+                with col2:
+                    st.write(f"**Duration:** {job.get('processing_duration', 0):.1f}s")
+                    st.write(f"**Timestamp:** {job.get('timestamp', 'N/A')[:19]}")
+
+                    if job.get('filepath'):
+                        st.write(f"**Output:** `{job.get('filepath')}`")
+
+                if not job.get('success') and job.get('error'):
+                    st.error(f"**Error:** {job.get('error')}")
+
+                # Show timings if available
+                if job.get('timings'):
+                    st.write("**Timings:**")
+                    timings_col1, timings_col2 = st.columns(2)
+                    with timings_col1:
+                        for key, value in list(job['timings'].items())[:len(job['timings'])//2]:
+                            st.write(f"  • {key}: {value:.1f}s")
+                    with timings_col2:
+                        for key, value in list(job['timings'].items())[len(job['timings'])//2:]:
+                            st.write(f"  • {key}: {value:.1f}s")
+
+
+def display_exit_node_log(base_dir="notes"):
+    """Display exit node tracker log."""
+    st.subheader("🌐 Exit Node Usage")
+
+    exit_nodes = load_exit_node_log(base_dir)
+
+    if not exit_nodes:
+        st.info("No exit node data yet. Process videos with Tor to see exit node usage!")
+        return
+
+    # Calculate stats
+    now = datetime.now()
+    in_cooldown = []
+    available = []
+
+    for ip, data in exit_nodes.items():
+        try:
+            last_used = datetime.fromisoformat(data['last_used'])
+            elapsed = (now - last_used).total_seconds()
+
+            if elapsed < 3600:  # 1 hour cooldown
+                in_cooldown.append((ip, data, elapsed))
+            else:
+                available.append((ip, data))
+        except:
+            pass
+
+    # Display summary metrics
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Total Tracked", len(exit_nodes))
+    with col2:
+        st.metric("In Cooldown", len(in_cooldown))
+    with col3:
+        st.metric("Available", len(available))
+
+    # Display nodes in cooldown
+    if in_cooldown:
+        st.subheader("⏳ Nodes in Cooldown")
+        cooldown_data = []
+        for ip, data, elapsed in sorted(in_cooldown, key=lambda x: x[2]):
+            remaining = 3600 - elapsed
+            minutes_remaining = int(remaining / 60)
+
+            cooldown_data.append({
+                'Exit IP': ip,
+                'Last Used': data.get('last_used', 'N/A')[:19],
+                'Cooldown Remaining': f"{minutes_remaining}m",
+                'Use Count': data.get('use_count', 0),
+                'Last Worker': data.get('last_worker_id', 'N/A')
+            })
+
+        df_cooldown = pd.DataFrame(cooldown_data)
+        st.dataframe(df_cooldown, use_container_width=True, hide_index=True)
+
+    # Display available nodes
+    if available:
+        with st.expander(f"✅ Available Nodes ({len(available)})"):
+            available_data = []
+            for ip, data in sorted(available, key=lambda x: x[1].get('last_used', ''), reverse=True):
+                available_data.append({
+                    'Exit IP': ip,
+                    'Last Used': data.get('last_used', 'N/A')[:19],
+                    'Use Count': data.get('use_count', 0),
+                    'First Seen': data.get('first_seen', 'N/A')[:19]
+                })
+
+            df_available = pd.DataFrame(available_data)
+            st.dataframe(df_available, use_container_width=True, hide_index=True)
 
 
 def validate_urls(url_text):
@@ -250,7 +463,7 @@ def main():
         st.divider()
 
     # Main content tabs
-    tab1, tab2, tab3 = st.tabs(["🎬 Process Videos", "📊 Results", "❓ Help"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🎬 Process Videos", "📊 Results", "📋 Logs", "❓ Help"])
 
     with tab1:
         # Quick start hint
@@ -547,6 +760,21 @@ def main():
             display_knowledge_graph_stats(processor)
 
     with tab3:
+        st.header("📋 Logs & Monitoring")
+
+        # Get base_dir from current processor or use default
+        base_dir = processor.output_dir if processor else Path("notes")
+
+        # Create subtabs for different log types
+        log_tab1, log_tab2 = st.tabs(["📋 Processing Log", "🌐 Exit Nodes"])
+
+        with log_tab1:
+            display_processing_log(base_dir=str(base_dir))
+
+        with log_tab2:
+            display_exit_node_log(base_dir=str(base_dir))
+
+    with tab4:
         st.header("❓ Help & Information")
 
         st.markdown("""

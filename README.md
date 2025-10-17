@@ -142,13 +142,3 @@ notes/
 - Worker 3: 65.7s
 - **Total: 66s (54% faster!)**
 
-## Next Steps
-
-- [ ] Tor exit node queue with 1-hour rotation
-- [ ] Resume failed jobs from log
-- [ ] Real-time progress tracking
-- [ ] Distributed processing
-
-## Examples
-
-See `example_job_logging.py` for complete usage examples.

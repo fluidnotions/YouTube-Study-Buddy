@@ -475,15 +475,14 @@ def main():
                             overall_progress.progress(completed_count / total)
                             overall_status.text(f"Processing: {completed_count}/{total} videos ({status})")
 
-                        # Set progress callback
-                        if hasattr(processor, 'parallel_processor'):
-                            processor.parallel_processor.progress_callback = progress_callback
+                        # Use the batch processing method which handles parallel internally
+                        processor.process_videos_batch(valid_urls)
 
-                        # Use the process_urls method which handles parallel internally
-                        processor.process_urls(valid_urls)
-
-                        # Count successful from metrics
-                        successful = processor.metrics.successful if hasattr(processor, 'metrics') else len(valid_urls)
+                        # Get job results from log
+                        all_jobs = processor.get_job_log()
+                        # Count successful jobs for these videos
+                        video_ids = [processor.validate_video_url(url)[0] for url in valid_urls]
+                        successful = sum(1 for job in all_jobs if job.get('video_id') in video_ids and job.get('success'))
                     else:
                         # Sequential processing
                         successful = 0

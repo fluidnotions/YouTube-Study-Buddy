@@ -197,6 +197,58 @@ class VideoProcessingJob:
             'timings': self.timings
         }
 
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Export complete job data as JSON-serializable dict.
+
+        Includes all state, metadata, errors, and file paths.
+        """
+        return {
+            # Input
+            'video_id': self.video_id,
+            'url': self.url,
+            'subject': self.subject,
+            'worker_id': self.worker_id,
+
+            # Stage 1: Transcript
+            'video_title': self.video_title,
+            'transcript': self.transcript,
+            'transcript_metadata': self.transcript_data,
+
+            # Stage 2: Generated content
+            'has_notes': self.has_notes(),
+            'has_assessment': self.has_assessment(),
+            'notes_length': len(self.study_notes) if self.study_notes else 0,
+            'assessment_length': len(self.assessment_content) if self.assessment_content else 0,
+
+            # Stage 3: Files
+            'output_dir': str(self.output_dir) if self.output_dir else None,
+            'notes_filepath': str(self.notes_filepath) if self.notes_filepath else None,
+            'assessment_filepath': str(self.assessment_filepath) if self.assessment_filepath else None,
+            'notes_file_exists': self.notes_filepath.exists() if self.notes_filepath else False,
+            'assessment_file_exists': self.assessment_filepath.exists() if self.assessment_filepath else False,
+
+            # Stage 4: PDFs
+            'pdf_subdir': str(self.pdf_subdir) if self.pdf_subdir else None,
+            'notes_pdf_path': str(self.notes_pdf_path) if self.notes_pdf_path else None,
+            'assessment_pdf_path': str(self.assessment_pdf_path) if self.assessment_pdf_path else None,
+            'notes_pdf_exists': self.notes_pdf_path.exists() if self.notes_pdf_path else False,
+            'assessment_pdf_exists': self.assessment_pdf_path.exists() if self.assessment_pdf_path else False,
+
+            # Metadata
+            'stage': self.stage.value,
+            'success': self.success,
+            'error': self.error,
+            'start_time': self.start_time,
+            'end_time': self.end_time,
+            'processing_duration': self.processing_duration,
+            'timings': self.timings,
+
+            # Summary
+            'files_created': [str(f) for f in self.get_all_files()],
+            'total_files': len(self.get_all_files())
+        }
+
     def __repr__(self) -> str:
         """String representation for debugging."""
         status = "✓" if self.success else "✗" if self.error else "⋯"

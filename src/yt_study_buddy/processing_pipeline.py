@@ -371,11 +371,12 @@ def process_video_job(
             - 'assessment_generator': AssessmentGenerator instance (optional)
             - 'obsidian_linker': ObsidianLinker instance
             - 'pdf_exporter': PDFExporter instance (optional)
+            - 'job_logger': JobLogger instance (optional)
             - 'output_dir': Path to output directory
             - 'filename_sanitizer': Function to sanitize filenames
 
     Returns:
-        Processed job object
+        Processed job object (also logged if job_logger provided)
     """
     start_time = time.time()
     job.start_time = start_time
@@ -415,6 +416,10 @@ def process_video_job(
         print(f"  ✓ Job completed in {job.processing_duration:.1f}s")
         print(f"{'='*60}\n")
 
+        # Log job if logger provided
+        if components.get('job_logger'):
+            components['job_logger'].log_job(job)
+
         return job
 
     except Exception as e:
@@ -424,5 +429,9 @@ def process_video_job(
 
         print(f"  ✗ Job failed: {e}")
         print(f"{'='*60}\n")
+
+        # Log failed job if logger provided
+        if components.get('job_logger'):
+            components['job_logger'].log_job(job)
 
         return job

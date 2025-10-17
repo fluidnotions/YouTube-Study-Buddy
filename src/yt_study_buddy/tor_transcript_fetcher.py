@@ -20,6 +20,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from .ytdlp_fallback import YtDlpFallback
 from .debug_logger import get_logger
 from .exit_node_tracker import get_tracker
+from .error_classifier import simplify_error
 
 
 class TorExitNodePool:
@@ -648,19 +649,24 @@ class TorTranscriptFetcher:
 
             except (requests.exceptions.Timeout, socket.timeout) as e:
                 last_error = e
-                print(f"Timeout on attempt {attempt + 1}: {e}")
+                simplified = "Connection timeout"
+                print(f"✗ {simplified} on attempt {attempt + 1}")
                 if attempt >= max_retries - 1:
-                    print(f"✗ All {max_retries} attempts failed due to timeouts")
+                    print(f"✗ All {max_retries} attempts timed out")
 
             except Exception as e:
                 last_error = e
-                print(f"Error on attempt {attempt + 1}: {e}")
-                # For non-timeout errors, might be blocked or other issue
-                # Still retry with circuit rotation
+                # Simplify verbose YouTube errors
+                simplified = simplify_error(str(e))
+                print(f"✗ {simplified} (attempt {attempt + 1})")
+
                 if attempt >= max_retries - 1:
                     print(f"✗ All {max_retries} attempts failed")
 
-        print(f"Failed to fetch transcript via Tor after {max_retries} attempts: {last_error}")
+        # Final error message
+        if last_error:
+            simplified_final = simplify_error(str(last_error))
+            print(f"Failed to fetch via Tor: {simplified_final}")
         return None
 
     def fetch_with_fallback(

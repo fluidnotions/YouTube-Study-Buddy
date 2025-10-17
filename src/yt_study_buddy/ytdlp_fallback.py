@@ -6,6 +6,7 @@ Used when Tor-based fetching fails due to IP blocking or other issues.
 import re
 from typing import Optional, List, Dict, Any
 import yt_dlp
+from .error_classifier import simplify_error
 
 
 class YtDlpFallback:
@@ -87,7 +88,8 @@ class YtDlpFallback:
                 }
 
         except Exception as e:
-            print(f"YT-DLP fallback failed: {e}")
+            simplified = simplify_error(str(e))
+            print(f"YT-DLP fallback failed: {simplified}")
             return None
 
     def _download_and_parse_subtitle(

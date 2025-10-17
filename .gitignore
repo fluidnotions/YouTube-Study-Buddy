@@ -12,7 +12,7 @@ urls.txt
 test_urls.txt
 /autofix.log
 /notes/**
-/notes_debug/**
+/debug_logs/**
 CLAUDE.md
 
 # Python
@@ -35,3 +35,4 @@ dist-electron/
 *.dmg
 *.exe
 *.msi
+/debug_logs/

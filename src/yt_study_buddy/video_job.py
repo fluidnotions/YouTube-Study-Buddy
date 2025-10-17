@@ -91,6 +91,12 @@ class VideoProcessingJob:
     end_time: Optional[float] = None
     processing_duration: Optional[float] = None
 
+    # Retry metadata
+    retry_count: int = 0
+    last_retry_time: Optional[float] = None
+    next_retry_time: Optional[float] = None
+    is_retryable: bool = True  # Can be set to False for permanent failures
+
     # Stage timings for analysis
     timings: Dict[str, float] = field(default_factory=dict)
 
@@ -129,6 +135,9 @@ class VideoProcessingJob:
         self.success = False
         self.error = error
         self.stage = stage or ProcessingStage.FAILED
+
+        # Classify if error is retryable
+        self._classify_retryability(error)
 
     def add_timing(self, stage_name: str, duration: float):
         """Record timing for a stage."""
@@ -197,6 +206,97 @@ class VideoProcessingJob:
             'timings': self.timings
         }
 
+    # ========================================================================
+    # Retry logic
+    # ========================================================================
+
+    def _classify_retryability(self, error: str):
+        """
+        Classify if error is retryable based on error message.
+
+        Non-retryable errors:
+        - No subtitles/transcripts available
+        - Video is private/deleted/unavailable
+        - Invalid video ID
+
+        Retryable errors:
+        - Network timeouts
+        - IP blocking / rate limits
+        - Connection failures
+        """
+        error_lower = error.lower()
+
+        # Non-retryable errors
+        non_retryable_patterns = [
+            'no subtitle',
+            'no transcript',
+            'video unavailable',
+            'video is private',
+            'deleted',
+            'invalid video id',
+            'members-only'
+        ]
+
+        for pattern in non_retryable_patterns:
+            if pattern in error_lower:
+                self.is_retryable = False
+                return
+
+        # All other errors are retryable (blocking, timeout, connection, etc.)
+        self.is_retryable = True
+
+    def schedule_retry(self, retry_delay_minutes: int = 15):
+        """
+        Schedule next retry attempt.
+
+        Args:
+            retry_delay_minutes: Minutes to wait before retry (default: 15)
+        """
+        import time
+
+        if not self.is_retryable:
+            return
+
+        self.retry_count += 1
+        self.last_retry_time = time.time()
+        self.next_retry_time = self.last_retry_time + (retry_delay_minutes * 60)
+
+    def should_retry_now(self) -> bool:
+        """
+        Check if job should be retried now.
+
+        Returns:
+            True if job failed, is retryable, and enough time has passed
+        """
+        import time
+
+        if self.success or not self.is_retryable:
+            return False
+
+        if self.next_retry_time is None:
+            # Never scheduled for retry
+            return False
+
+        return time.time() >= self.next_retry_time
+
+    def get_retry_status(self) -> Dict[str, Any]:
+        """Get retry status information."""
+        import time
+
+        status = {
+            'is_retryable': self.is_retryable,
+            'retry_count': self.retry_count,
+            'last_retry_time': self.last_retry_time,
+            'next_retry_time': self.next_retry_time,
+        }
+
+        if self.next_retry_time:
+            time_until_retry = self.next_retry_time - time.time()
+            status['minutes_until_retry'] = max(0, time_until_retry / 60)
+            status['ready_to_retry'] = self.should_retry_now()
+
+        return status
+
     def to_json(self) -> Dict[str, Any]:
         """
         Export complete job data as JSON-serializable dict.
@@ -253,6 +353,12 @@ class VideoProcessingJob:
             'end_time': self.end_time,
             'processing_duration': self.processing_duration,
             'timings': self.timings,
+
+            # Retry metadata
+            'retry_count': self.retry_count,
+            'last_retry_time': self.last_retry_time,
+            'next_retry_time': self.next_retry_time,
+            'is_retryable': self.is_retryable,
 
             # Summary
             'files_created': [str(f) for f in self.get_all_files()],

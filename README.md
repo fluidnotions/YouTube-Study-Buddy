@@ -1,6 +1,6 @@
 # YouTube Study Buddy
 
-Learning from educational YouTube videos and want to maximize retention and build meaningful connections? **YouTube Study Buddy** transforms any YouTube video into structured study notes with intelligent cross-referencing that builds your personal knowledge graph over time, turning scattered video content into an interconnected learning system.
+Convert YouTube videos into comprehensive study notes with automatic cross-referencing between related topics. Build a connected knowledge base that grows smarter with each video you process.
 
 ## 🧠 The Science: Active Learning vs Passive Watching
 
@@ -16,57 +16,21 @@ Learning from educational YouTube videos and want to maximize retention and buil
 
 ## 💰 Why This Tool Exists (Free vs Paid Alternatives)
 
-Most AI-powered YouTube note-taking solutions in 2025 require expensive subscriptions or have significant limitations:
-
-**Paid Solutions ($10-50+/month):**
-- **NoteGPT** - Comprehensive AI learning assistant (premium features require subscription)
-- **Notta** - Professional transcription service (98.86% accuracy, limited free tier)
-- **Eightify** - AI video summarizer (subscription for unlimited summaries)
-- **Maestra** - Multi-language support (subscription for full feature access)
-
-**Free Alternatives (Limited Features):**
-- **Basic transcript generators** - No AI analysis, just raw text extraction
-- **Tactiq** - Chrome extension transcription (no study note formatting)
-- **YouTube auto-captions** - Inaccurate, no structure or cross-referencing
-- **Manual note-taking** - Time-consuming, no automation or connections
+Most AI-powered YouTube note-taking solutions require expensive subscriptions ($10-50+/month) like NoteGPT, Notta, Eightify, and Maestra. Free alternatives offer limited features or just basic transcript extraction with no analysis.
 
 **YouTube Study Buddy is completely free** and provides AI-powered study note generation with intelligent cross-referencing and Obsidian integration. Perfect for students, lifelong learners, and professionals who want to build a connected knowledge base without subscription costs.
 
-Unlike simple transcript extractors, YouTube Study Buddy creates **structured study materials** with cross-references that grow smarter with each video you process, building an interconnected web of knowledge over time.
+## Features
 
-## ✨ Key Features
-
-### Core Learning Features
-- **AI-Powered Study Notes** – Transforms raw transcripts into structured learning materials with defined sections
-- **Learning Assessments** – Generates 4 question types including unique "One-Up Challenges" that ask you to improve upon what you learned
-- **Auto-Categorization** – ML-powered subject detection organizes your knowledge base automatically
+- **Automatic Transcript Extraction** from YouTube videos
+- **AI-Generated Study Notes** using Claude API with structured sections
+- **Learning Assessments** – Generates 4 question types including unique "One-Up Challenges"
+- **Semantic Cross-Referencing** – Finds conceptually related content across your knowledge base
+- **Auto-Categorization** – ML-powered subject detection organizes notes automatically
+- **Obsidian Auto-Linking** – Automatically creates `[[wiki-style]]` links between related notes
+- **PDF Export** – Generate formatted PDF study materials from your notes
 - **Batch Processing** – Process multiple videos efficiently with URL file support
-- **Markdown Output** – Compatible with Obsidian, Notion, and other markdown-based tools
-
-### Intelligent Cross-Referencing (RAG)
-- **Semantic Understanding** – Goes beyond keyword matching to find conceptually related content
-- **Smart Connections** – Automatically links "neural networks" with "deep learning" and similar concepts
-- **Knowledge Graph Growth** – Each new video strengthens connections in your existing knowledge base
-- **Obsidian Integration** – Creates `[[wiki-style]]` links for seamless knowledge graph building
-- **Subject Organization** – Organize notes by topic with global or subject-specific cross-referencing
-
-### What Makes RAG Special?
-
-Traditional keyword matching misses conceptual relationships. YouTube Study Buddy uses **RAG (Retrieval-Augmented Generation)** with semantic embeddings to understand meaning, not just match words:
-
-**Before (Keyword Matching):**
-- "machine learning" only finds exact text matches
-- Misses related concepts like "neural networks" or "deep learning"
-- Limited relevance ranking
-
-**After (Semantic RAG):**
-- Understands that "gradient descent" relates to "backpropagation"
-- Finds conceptual connections across your entire knowledge base
-- Relevance-ranked results prioritize the most meaningful links
-
-## 🎯 Why It Matters
-
-For students, researchers, and lifelong learners, this solves the pain of information overload and disconnected knowledge. Instead of isolated notes that sit unused, you get **interconnected study materials** that reveal patterns, reinforce learning, and help you build genuine understanding across topics.
+- **Knowledge Graph Growth** – Each new video strengthens connections in your existing notes
 
 ## 🚀 Quick Start
 
@@ -85,42 +49,44 @@ docker-compose up -d
 open http://localhost:8501
 ```
 
-See [Docker Setup Guide](docs/DOCKER_SETUP.md) for configuration options, troubleshooting, and RAG features.
+See [Docker Setup Guide](docs/DOCKER_SETUP.md) for configuration options, troubleshooting, and advanced features.
 
 ### Local Installation
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+# 1. Install UV (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Configure API key
+# 2. Install dependencies
+uv sync
+
+# 3. Configure API key
 echo "CLAUDE_API_KEY=your_key_here" > .env
 
-# 3. Run Streamlit interface
-streamlit run streamlit_app.py
+# 4. Run Streamlit interface
+uv run streamlit run streamlit_app.py
 
 # Or use CLI
-python main.py "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run python main.py "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-## 💡 Usage Examples
+## 💡 Usage
 
 ### Web Interface (Streamlit)
-The easiest way to use YouTube Study Buddy:
-1. Start the app: `streamlit run streamlit_app.py`
+1. Start the app: `uv run streamlit run streamlit_app.py`
 2. Paste YouTube URL
 3. Select subject (optional)
 4. Click "Generate Notes"
-5. Download markdown or view in browser
+5. Notes automatically saved to `notes/` directory
 
 ### Command Line Interface
 
 **Single Video:**
 ```bash
 # With subject organization
-python main.py --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
+uv run python main.py --subject "Machine Learning" "https://youtube.com/watch?v=xyz"
 
 # Without subject (global knowledge base)
-python main.py "https://youtube.com/watch?v=xyz"
+uv run python main.py "https://youtube.com/watch?v=xyz"
 ```
 
 **Batch Processing:**
@@ -130,16 +96,16 @@ echo "https://youtube.com/watch?v=abc123" > urls.txt
 echo "https://youtube.com/watch?v=def456" >> urls.txt
 
 # Process all URLs
-python main.py --batch
+uv run python main.py --batch
 ```
 
-**Subject-Specific Organization:**
+**Subject-Specific Cross-Referencing:**
 ```bash
 # Cross-reference within subject only
-python main.py --subject "AI Ethics" --subject-only --batch
+uv run python main.py --subject "AI Ethics" --subject-only --batch
 
 # Cross-reference globally (default)
-python main.py --subject "Python Programming" --batch
+uv run python main.py --subject "Python Programming" --batch
 ```
 
 ## 📚 Example Output
@@ -161,7 +127,7 @@ Each generated note includes:
 ### 3. Intelligent Cross-References
 - `[[Related Topic 1]]` - Semantically similar content
 - `[[Related Topic 2]]` - Connected concepts from other notes
-- Links ranked by relevance using RAG similarity scores
+- Links ranked by relevance across your knowledge base
 
 ## 🛠️ Technical Details
 
@@ -181,26 +147,6 @@ Python 3.10+ required.
 - [RAG Design](docs/rag-design.md) - How semantic cross-referencing works
 - [RAG Integration](docs/rag-integration.md) - Migration guide and technical details
 - [Retry Guide](docs/RETRY_GUIDE.md) - Error handling and retry system
-
-## 🤝 Contributing
-
-Contributions welcome! This project is actively developed and open to improvements in:
-- Learning assessment quality
-- Cross-referencing algorithms
-- Additional AI model support
-- UI/UX enhancements
-
-## 📝 License
-
-MIT License - Free to use, modify, and distribute.
-
-## 🌟 Support
-
-If you find this tool helpful:
-- ⭐ Star the repository
-- 🐛 Report bugs via GitHub Issues
-- 💡 Suggest features or improvements
-- 📢 Share with fellow learners
 
 ---
 

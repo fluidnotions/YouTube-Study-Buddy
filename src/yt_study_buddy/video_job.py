@@ -1,0 +1,255 @@
+"""
+Video processing job data class.
+
+This dataclass holds all data for a video processing job as it flows through
+the processing pipeline:
+  1. Fetch transcript & title
+  2. Generate notes & assessment
+  3. Write files & export PDFs
+"""
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+from enum import Enum
+
+
+class ProcessingStage(Enum):
+    """Processing stage for tracking progress."""
+    CREATED = "created"
+    FETCHING_TRANSCRIPT = "fetching_transcript"
+    TRANSCRIPT_FETCHED = "transcript_fetched"
+    GENERATING_NOTES = "generating_notes"
+    NOTES_GENERATED = "notes_generated"
+    GENERATING_ASSESSMENT = "generating_assessment"
+    ASSESSMENT_GENERATED = "assessment_generated"
+    WRITING_FILES = "writing_files"
+    FILES_WRITTEN = "files_written"
+    EXPORTING_PDFS = "exporting_pdfs"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class VideoProcessingJob:
+    """
+    Complete data for a video processing job.
+
+    This object flows through the processing pipeline, accumulating data
+    at each stage. Enables true pipelining and parallel processing.
+
+    Pipeline flow:
+        1. Create job with URL
+        2. Fetch transcript & title → populate transcript_data, video_title
+        3. Generate notes → populate study_notes
+        4. Generate assessment → populate assessment_content
+        5. Write files → populate file paths
+        6. Export PDFs → populate pdf_paths
+    """
+
+    # ========================================================================
+    # Input data (provided at creation)
+    # ========================================================================
+    url: str
+    video_id: str
+    subject: Optional[str] = None
+    worker_id: Optional[int] = None
+
+    # ========================================================================
+    # Stage 1: Transcript & Title
+    # ========================================================================
+    video_title: Optional[str] = None
+    transcript: Optional[str] = None
+    transcript_data: Optional[Dict[str, Any]] = None  # duration, length, segments, method
+
+    # ========================================================================
+    # Stage 2: Content Generation
+    # ========================================================================
+    study_notes: Optional[str] = None
+    assessment_content: Optional[str] = None
+
+    # ========================================================================
+    # Stage 3: File Paths (determined during write)
+    # ========================================================================
+    output_dir: Optional[Path] = None
+    notes_filepath: Optional[Path] = None
+    assessment_filepath: Optional[Path] = None
+
+    # ========================================================================
+    # Stage 4: PDF Export
+    # ========================================================================
+    notes_pdf_path: Optional[Path] = None
+    assessment_pdf_path: Optional[Path] = None
+    pdf_subdir: Optional[Path] = None  # pdfs/ subfolder
+
+    # ========================================================================
+    # Metadata
+    # ========================================================================
+    stage: ProcessingStage = ProcessingStage.CREATED
+    success: bool = False
+    error: Optional[str] = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    processing_duration: Optional[float] = None
+
+    # Stage timings for analysis
+    timings: Dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Ensure Path objects are created."""
+        if self.output_dir and not isinstance(self.output_dir, Path):
+            self.output_dir = Path(self.output_dir)
+        if self.notes_filepath and not isinstance(self.notes_filepath, Path):
+            self.notes_filepath = Path(self.notes_filepath)
+        if self.assessment_filepath and not isinstance(self.assessment_filepath, Path):
+            self.assessment_filepath = Path(self.assessment_filepath)
+        if self.notes_pdf_path and not isinstance(self.notes_pdf_path, Path):
+            self.notes_pdf_path = Path(self.notes_pdf_path)
+        if self.assessment_pdf_path and not isinstance(self.assessment_pdf_path, Path):
+            self.assessment_pdf_path = Path(self.assessment_pdf_path)
+        if self.pdf_subdir and not isinstance(self.pdf_subdir, Path):
+            self.pdf_subdir = Path(self.pdf_subdir)
+
+    # ========================================================================
+    # Helper methods
+    # ========================================================================
+
+    def set_stage(self, stage: ProcessingStage):
+        """Update processing stage."""
+        self.stage = stage
+
+    def mark_completed(self, duration: Optional[float] = None):
+        """Mark job as successfully completed."""
+        self.success = True
+        self.stage = ProcessingStage.COMPLETED
+        if duration:
+            self.processing_duration = duration
+
+    def mark_failed(self, error: str, stage: Optional[ProcessingStage] = None):
+        """Mark job as failed with error."""
+        self.success = False
+        self.error = error
+        self.stage = stage or ProcessingStage.FAILED
+
+    def add_timing(self, stage_name: str, duration: float):
+        """Record timing for a stage."""
+        self.timings[stage_name] = duration
+
+    def get_youtube_url(self) -> str:
+        """Get the full YouTube URL."""
+        if self.url:
+            return self.url
+        return f"https://www.youtube.com/watch?v={self.video_id}"
+
+    def get_markdown_content(self) -> Optional[str]:
+        """Generate markdown content for notes file."""
+        if not self.study_notes or not self.video_title:
+            return None
+
+        youtube_url = self.get_youtube_url()
+        return f"# {self.video_title}\n\n[YouTube Video]({youtube_url})\n\n---\n\n{self.study_notes}"
+
+    def has_transcript(self) -> bool:
+        """Check if transcript was successfully fetched."""
+        return self.transcript is not None and self.video_title is not None
+
+    def has_notes(self) -> bool:
+        """Check if notes were successfully generated."""
+        return self.study_notes is not None
+
+    def has_assessment(self) -> bool:
+        """Check if assessment was successfully generated."""
+        return self.assessment_content is not None
+
+    def has_files_written(self) -> bool:
+        """Check if files were written."""
+        return self.notes_filepath is not None and self.notes_filepath.exists()
+
+    def has_pdfs_exported(self) -> bool:
+        """Check if PDFs were exported."""
+        return self.notes_pdf_path is not None and self.notes_pdf_path.exists()
+
+    def get_all_files(self) -> List[Path]:
+        """Get list of all files created for this job."""
+        files = []
+        if self.notes_filepath:
+            files.append(self.notes_filepath)
+        if self.assessment_filepath:
+            files.append(self.assessment_filepath)
+        if self.notes_pdf_path:
+            files.append(self.notes_pdf_path)
+        if self.assessment_pdf_path:
+            files.append(self.assessment_pdf_path)
+        return [f for f in files if f.exists()]
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get summary of job for logging/reporting."""
+        return {
+            'video_id': self.video_id,
+            'title': self.video_title,
+            'url': self.url,
+            'subject': self.subject,
+            'worker_id': self.worker_id,
+            'stage': self.stage.value,
+            'success': self.success,
+            'error': self.error,
+            'duration': self.processing_duration,
+            'files_created': len(self.get_all_files()),
+            'timings': self.timings
+        }
+
+    def __repr__(self) -> str:
+        """String representation for debugging."""
+        status = "✓" if self.success else "✗" if self.error else "⋯"
+        title = self.video_title or self.video_id
+        stage = self.stage.value
+        return f"VideoJob({status} {title} [{stage}])"
+
+
+# Factory functions for creating jobs
+
+def create_job_from_url(url: str, video_id: str, subject: Optional[str] = None,
+                       worker_id: Optional[int] = None) -> VideoProcessingJob:
+    """
+    Create a new video processing job from URL.
+
+    Args:
+        url: YouTube URL
+        video_id: Extracted video ID
+        subject: Subject category
+        worker_id: Worker ID for parallel processing
+
+    Returns:
+        New VideoProcessingJob instance
+    """
+    return VideoProcessingJob(
+        url=url,
+        video_id=video_id,
+        subject=subject,
+        worker_id=worker_id,
+        stage=ProcessingStage.CREATED
+    )
+
+
+def create_job_batch(urls: List[str], subject: Optional[str] = None) -> List[VideoProcessingJob]:
+    """
+    Create a batch of jobs from URLs.
+
+    Args:
+        urls: List of YouTube URLs
+        subject: Subject category for all videos
+
+    Returns:
+        List of VideoProcessingJob instances
+    """
+    from .video_processor import VideoProcessor
+
+    jobs = []
+    processor = VideoProcessor("tor")
+
+    for i, url in enumerate(urls):
+        video_id = processor.get_video_id(url)
+        if video_id:
+            job = create_job_from_url(url, video_id, subject, worker_id=i)
+            jobs.append(job)
+
+    return jobs

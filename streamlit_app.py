@@ -261,7 +261,7 @@ def display_processing_log(base_dir="notes"):
         st.subheader("Job Details")
         for i, job in enumerate(filtered_jobs[:20]):  # Limit to 20 most relevant
             status_icon = '✅' if job.get('success') else '❌'
-            title = job.get('video_title', job.get('title', job.get('video_id', 'Unknown')))
+            title = job.get('video_title') or job.get('title') or job.get('video_id') or 'Unknown'
 
             with st.expander(f"{status_icon} {title[:60]}"):
                 col1, col2 = st.columns(2)

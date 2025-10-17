@@ -25,3 +25,13 @@ __pycache__/
 dist/
 build/
 /debug_logs/
+
+# Node.js / Electron
+node_modules/
+package-lock.json
+dist-electron/
+*.AppImage
+*.deb
+*.dmg
+*.exe
+*.msi

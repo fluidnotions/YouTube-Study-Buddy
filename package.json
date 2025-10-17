@@ -1,0 +1,68 @@
+{
+  "name": "youtube-study-buddy",
+  "version": "1.0.0",
+  "description": "AI-powered study notes generator from YouTube videos",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "keywords": [
+    "youtube",
+    "study",
+    "notes",
+    "ai",
+    "education",
+    "streamlit",
+    "electron"
+  ],
+  "author": "Justin Robinson",
+  "license": "MIT",
+  "build": {
+    "appId": "com.justinrobinson.youtube-study-buddy",
+    "productName": "YouTube Study Buddy",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "streamlit_app.py",
+      "src/**/*",
+      "notes/.gitkeep",
+      "pyproject.toml",
+      "uv.lock",
+      "README.md"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Education",
+      "icon": "electron/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.education",
+      "icon": "electron/icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "electron/icon.ico"
+    }
+  },
+  "dependencies": {
+    "wait-on": "^7.2.0"
+  },
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  }
+}

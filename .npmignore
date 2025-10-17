@@ -1,0 +1,16 @@
+# Don't include in npm package
+node_modules/
+dist-electron/
+.git/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.env
+.env.local
+notes/processing_log.json
+notes/exit_nodes.json
+notes/*/
+!notes/.gitkeep

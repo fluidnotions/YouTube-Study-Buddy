@@ -762,8 +762,8 @@ def main():
     with tab3:
         st.header("📋 Logs & Monitoring")
 
-        # Get base_dir from current processor or use default
-        base_dir = processor.output_dir if processor else Path("notes")
+        # Use output_base_dir from sidebar (already defined above)
+        base_dir = output_base_dir
 
         # Create subtabs for different log types
         log_tab1, log_tab2 = st.tabs(["📋 Processing Log", "🌐 Exit Nodes"])

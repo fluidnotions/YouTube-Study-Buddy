@@ -37,6 +37,10 @@ dev = [
     "black>=23.0.0",
     "flake8>=6.0.0",
 ]
+pdf = [
+    "weasyprint>=60.0",
+    "markdown2>=2.4.0",
+]
 
 [project.scripts]
 youtube-study-buddy = "yt_study_buddy.cli:main"

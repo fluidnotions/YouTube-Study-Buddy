@@ -52,7 +52,7 @@ docker-compose up -d
 # 4. Access the app at http://localhost:8501
 ```
 
-**For development:** See [DOCKER.md](DOCKER.md) for building from source and development workflow.
+**For development:** See [DOCKER.md](docs/DOCKER.md) for building from source and development workflow.
 
 **Manage containers**:
 ```bash

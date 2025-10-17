@@ -21,13 +21,19 @@ from .parallel_processor import ParallelVideoProcessor, ProcessingResult, Proces
 from .study_notes_generator import StudyNotesGenerator
 from .video_processor import VideoProcessor
 
+try:
+    from .pdf_exporter import PDFExporter
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+
 
 class YouTubeStudyNotes:
     """Main application class for processing YouTube videos into study notes."""
 
     def __init__(self, subject=None, global_context=True, base_dir="notes",
                  generate_assessments=True, auto_categorize=True,
-                 parallel=False, max_workers=3):
+                 parallel=False, max_workers=3, export_pdf=False, pdf_theme='obsidian'):
         self.subject = subject
         self.global_context = global_context
         self.base_dir = base_dir
@@ -36,6 +42,8 @@ class YouTubeStudyNotes:
         self.auto_categorize = auto_categorize and not subject  # Only auto-categorize when no subject provided
         self.parallel = parallel
         self.max_workers = max_workers
+        self.export_pdf = export_pdf
+        self.pdf_theme = pdf_theme
 
         self.video_processor = VideoProcessor("tor")
         self.knowledge_graph = KnowledgeGraph(base_dir, subject, global_context)
@@ -45,6 +53,19 @@ class YouTubeStudyNotes:
         # Initialize new components
         self.auto_categorizer = AutoCategorizer() if self.auto_categorize else None
         self.assessment_generator = AssessmentGenerator(self.notes_generator.client) if generate_assessments else None
+
+        # Initialize PDF exporter if requested
+        if self.export_pdf:
+            if not PDF_AVAILABLE:
+                print("Warning: PDF export requires additional dependencies:")
+                print("  uv pip install weasyprint markdown2")
+                print("Continuing without PDF export...")
+                self.export_pdf = False
+                self.pdf_exporter = None
+            else:
+                self.pdf_exporter = PDFExporter(theme=self.pdf_theme)
+        else:
+            self.pdf_exporter = None
 
         # Thread locks for parallel processing
         self._file_lock = threading.Lock()
@@ -143,9 +164,7 @@ class YouTubeStudyNotes:
             # Generate study notes with Claude
             print("Generating study notes with Claude AI...")
             study_notes = self.notes_generator.generate_notes(
-                transcript=transcript,
-                video_title=video_title,
-                video_url=url
+                transcript=transcript
             )
 
             # Save to file using the notes generator's method
@@ -157,35 +176,67 @@ class YouTubeStudyNotes:
             original_url = f"https://www.youtube.com/watch?v={video_id}"
             markdown_content = f"# {video_title}\n\n[YouTube Video]({original_url})\n\n---\n\n{study_notes}"
 
-            # Write file (thread-safe for parallel processing)
+            # ===================================================================
+            # PHASE 1: Generate all content (PARALLEL - outside lock)
+            # ===================================================================
+
+            # Generate assessment if enabled (expensive Claude API call - do in parallel!)
+            assessment_content = None
+            assessment_filename = None
+            assessment_path = None
+
+            if self.assessment_generator:
+                print("Generating learning assessment...")
+                try:
+                    assessment_content = self.assessment_generator.generate_assessment(
+                        transcript, study_notes, video_title, original_url
+                    )
+                    assessment_filename = self.assessment_generator.create_assessment_filename(video_title)
+                    assessment_path = os.path.join(self.output_dir, assessment_filename)
+                    print(f"  ✓ Assessment generated")
+
+                except Exception as e:
+                    print(f"  ✗ Assessment generation failed: {e}")
+                    assessment_content = None
+
+            # ===================================================================
+            # PHASE 2: Write files (FAST - needs lock for thread safety)
+            # ===================================================================
+
             with self._file_lock:
+                # Write study notes file
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(markdown_content)
                 print(f"✓ Study notes saved to {filename}")
 
-                # Add cross-references using Obsidian linker
+                # Write assessment file if generated
+                if assessment_content and assessment_path:
+                    with open(assessment_path, 'w', encoding='utf-8') as f:
+                        f.write(assessment_content)
+                    print(f"  ✓ Assessment saved to {assessment_filename}")
+
+                # Add cross-references using Obsidian linker (relatively fast)
                 print("Adding cross-references to related notes...")
                 self.obsidian_linker.process_file(filepath)
 
-                # Generate assessment if enabled
-                if self.assessment_generator:
-                    print("Generating learning assessment...")
-                    try:
-                        assessment_content = self.assessment_generator.generate_assessment(
-                            transcript, study_notes, video_title, original_url
-                        )
+            # ===================================================================
+            # PHASE 3: Export PDFs (PARALLEL - outside lock, per-worker)
+            # ===================================================================
 
-                        # Save assessment file
-                        assessment_filename = self.assessment_generator.create_assessment_filename(video_title)
-                        assessment_path = os.path.join(self.output_dir, assessment_filename)
+            if self.pdf_exporter:
+                print("Exporting to PDF...")
+                try:
+                    # Export study notes PDF
+                    pdf_path = self.pdf_exporter.markdown_to_pdf(filepath)
+                    print(f"  ✓ PDF exported: {pdf_path.name}")
 
-                        with open(assessment_path, 'w', encoding='utf-8') as f:
-                            f.write(assessment_content)
+                    # Export assessment PDF if it was generated
+                    if assessment_path and os.path.exists(assessment_path):
+                        assessment_pdf = self.pdf_exporter.markdown_to_pdf(assessment_path)
+                        print(f"  ✓ Assessment PDF: {assessment_pdf.name}")
 
-                        print(f"  Assessment saved to {assessment_filename}")
-
-                    except Exception as e:
-                        print(f"  Warning: Assessment generation failed: {e}")
+                except Exception as e:
+                    print(f"  ✗ PDF export failed: {e}")
 
             # Update knowledge graph cache (thread-safe)
             with self._kg_lock:
@@ -319,6 +370,8 @@ Options:
   --workers, -w <num>      Number of parallel workers (default: 3, max: 10)
   --no-assessments         Disable assessment generation
   --no-auto-categorize     Disable auto-categorization
+  --export-pdf             Export notes to PDF with Obsidian-style formatting
+  --pdf-theme <theme>      PDF theme: default, obsidian, academic, minimal (default: obsidian)
   --help, -h               Show this help message
 
 Examples:
@@ -333,6 +386,12 @@ Examples:
 
   # With subject organization
   youtube-study-buddy --subject "Machine Learning" https://youtube.com/watch?v=xyz
+
+  # Export to PDF with Obsidian theme
+  youtube-study-buddy --export-pdf https://youtube.com/watch?v=xyz
+
+  # Export with academic theme
+  youtube-study-buddy --export-pdf --pdf-theme academic --file urls.txt
 
 Performance:
   Sequential: ~60s per video
@@ -377,6 +436,10 @@ def main():
     parser.add_argument('--workers', '-w', type=int, default=3, help='Number of parallel workers (default: 3)')
     parser.add_argument('--no-assessments', action='store_true', help='Disable assessment generation')
     parser.add_argument('--no-auto-categorize', action='store_true', help='Disable auto-categorization')
+    parser.add_argument('--export-pdf', action='store_true', help='Export notes to PDF (requires: uv pip install weasyprint markdown2)')
+    parser.add_argument('--pdf-theme', default='obsidian', choices=['default', 'obsidian', 'academic', 'minimal'],
+                       help='PDF theme style (default: obsidian)')
+    parser.add_argument('--debug-logging', action='store_true', help='Enable detailed debug logging to debug_logs/ directory')
     parser.add_argument('--help', '-h', action='store_true', help='Show help message')
 
     args = parser.parse_args()
@@ -385,6 +448,15 @@ def main():
         show_help()
         sys.exit(0)
 
+    # Enable debug logging if requested
+    if args.debug_logging:
+        from .debug_logger import enable_debug_logging
+        logger = enable_debug_logging()
+        print(f"✓ Debug logging enabled")
+        print(f"  Session log: {logger.session_log}")
+        print(f"  API log: {logger.api_log}")
+        print()
+
     # Create app instance with configuration
     app = YouTubeStudyNotes(
         subject=args.subject,
@@ -392,7 +464,9 @@ def main():
         generate_assessments=not args.no_assessments,
         auto_categorize=not args.no_auto_categorize,
         parallel=args.parallel,
-        max_workers=args.workers
+        max_workers=args.workers,
+        export_pdf=args.export_pdf,
+        pdf_theme=args.pdf_theme
     )
 
     # Collect URLs from either command line or file
@@ -414,6 +488,13 @@ def main():
 
     # Process the URLs
     app.process_urls(urls_to_process)
+
+    # Show debug log analysis if enabled
+    if args.debug_logging:
+        print("\n" + "="*60)
+        from .debug_logger import get_logger
+        logger = get_logger()
+        logger.analyze_logs()
 
 
 if __name__ == "__main__":

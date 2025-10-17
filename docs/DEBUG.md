@@ -272,6 +272,6 @@ DEBUG_CONFIG=debug.quick python debug_main.py
 
 ## See Also
 
-- [README.md](README.md) - Main project documentation
+- [README.md](../README.md) - Main project documentation
 - [DOCKER.md](DOCKER.md) - Docker setup and workflow
 - [FIXES_APPLIED.md](FIXES_APPLIED.md) - Recent bug fixes

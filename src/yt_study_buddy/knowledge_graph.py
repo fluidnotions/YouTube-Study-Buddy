@@ -8,7 +8,7 @@ import re
 class KnowledgeGraph:
     """Manages concept extraction and relationship finding between study notes."""
 
-    def __init__(self, base_dir="Study notes", subject=None, global_context=True):
+    def __init__(self, base_dir="notes", subject=None, global_context=True):
         self.base_dir = base_dir
         self.subject = subject
         self.global_context = global_context

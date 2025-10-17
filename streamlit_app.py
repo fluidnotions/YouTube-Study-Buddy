@@ -315,6 +315,8 @@ def display_processing_log(base_dir="notes"):
 
 def display_exit_node_log(base_dir="notes"):
     """Display exit node tracker log."""
+    from src.yt_study_buddy.exit_node_tracker import humanize_timedelta
+
     st.subheader("🌐 Exit Node Usage")
 
     exit_nodes = load_exit_node_log(base_dir)
@@ -323,7 +325,7 @@ def display_exit_node_log(base_dir="notes"):
         st.info("No exit node data yet. Process videos with Tor to see exit node usage!")
         return
 
-    # Calculate stats
+    # Calculate stats (using 24-hour cooldown now)
     now = datetime.now()
     in_cooldown = []
     available = []
@@ -331,12 +333,14 @@ def display_exit_node_log(base_dir="notes"):
     for ip, data in exit_nodes.items():
         try:
             last_used = datetime.fromisoformat(data['last_used'])
-            elapsed = (now - last_used).total_seconds()
+            elapsed_seconds = (now - last_used).total_seconds()
+            time_since = now - last_used
 
-            if elapsed < 3600:  # 1 hour cooldown
-                in_cooldown.append((ip, data, elapsed))
+            # 24-hour cooldown
+            if elapsed_seconds < 86400:  # 24 hours
+                in_cooldown.append((ip, data, elapsed_seconds, time_since))
             else:
-                available.append((ip, data))
+                available.append((ip, data, time_since))
         except:
             pass
 
@@ -346,22 +350,22 @@ def display_exit_node_log(base_dir="notes"):
     with col1:
         st.metric("Total Tracked", len(exit_nodes))
     with col2:
-        st.metric("In Cooldown", len(in_cooldown))
+        st.metric("In Cooldown (24h)", len(in_cooldown))
     with col3:
         st.metric("Available", len(available))
 
     # Display nodes in cooldown
     if in_cooldown:
-        st.subheader("⏳ Nodes in Cooldown")
+        st.subheader("⏳ Nodes in Cooldown (24 hours)")
         cooldown_data = []
-        for ip, data, elapsed in sorted(in_cooldown, key=lambda x: x[2]):
-            remaining = 3600 - elapsed
-            minutes_remaining = int(remaining / 60)
+        for ip, data, elapsed, time_since in sorted(in_cooldown, key=lambda x: x[2]):
+            remaining = 86400 - elapsed
+            hours_remaining = int(remaining / 3600)
 
             cooldown_data.append({
                 'Exit IP': ip,
-                'Last Used': data.get('last_used', 'N/A')[:19],
-                'Cooldown Remaining': f"{minutes_remaining}m",
+                'Last Used': humanize_timedelta(time_since),
+                'Cooldown Remaining': f"{hours_remaining}h",
                 'Use Count': data.get('use_count', 0),
                 'Last Worker': data.get('last_worker_id', 'N/A')
             })
@@ -373,10 +377,10 @@ def display_exit_node_log(base_dir="notes"):
     if available:
         with st.expander(f"✅ Available Nodes ({len(available)})"):
             available_data = []
-            for ip, data in sorted(available, key=lambda x: x[1].get('last_used', ''), reverse=True):
+            for ip, data, time_since in sorted(available, key=lambda x: x[1].get('last_used', ''), reverse=True):
                 available_data.append({
                     'Exit IP': ip,
-                    'Last Used': data.get('last_used', 'N/A')[:19],
+                    'Last Used': humanize_timedelta(time_since),
                     'Use Count': data.get('use_count', 0),
                     'First Seen': data.get('first_seen', 'N/A')[:19]
                 })

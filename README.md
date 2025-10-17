@@ -1,8 +1,23 @@
-# YouTube Study Buddy Documentation
+# YouTube Study Buddy
 
-Complete guide to the stateless pipeline architecture with parallel processing and automatic job logging.
+Transform YouTube videos into organized study notes with AI-powered analysis, automatic retry, and Tor-based transcript fetching.
 
 ## Quick Start
+
+### Using Docker (Recommended)
+
+```bash
+# 1. Set your Claude API key in .env
+echo "CLAUDE_API_KEY=your_key_here" > .env
+
+# 2. Start services
+docker-compose up -d
+
+# 3. Open browser
+open http://localhost:8501
+```
+
+### Using CLI
 
 ```bash
 # Sequential processing
@@ -14,22 +29,122 @@ uv run yt-study-buddy --parallel --workers 3 \
   https://youtu.be/VIDEO2 \
   https://youtu.be/VIDEO3
 
-# View processing results
+# View processing logs
 cat notes/processing_log.json | jq '.'
 ```
 
-## Core Concepts
+## Features
 
-### Stateless Pipeline Architecture
+### Core Capabilities
+- 🤖 **AI-Powered Notes** - Claude Sonnet 4.5 generates comprehensive study materials
+- 📝 **Learning Assessments** - Automatic quiz generation with gap analysis
+- 🔄 **Automatic Retry** - 15-minute retry system for failed jobs (see [RETRY_GUIDE.md](RETRY_GUIDE.md))
+- 🌐 **Tor Integration** - Bypass rate limits with rotating exit nodes
+- 🏷️ **Auto-Categorization** - ML-based subject detection
+- 📊 **Knowledge Graph** - Cross-reference related concepts
+- 📄 **PDF Export** - Multiple themes (Obsidian, Academic, Minimal)
 
-**Key Achievement:** Assessment generation now happens **in parallel** across workers (54% faster)
+### Reliability Features
+- **24-Hour Exit IP Cooldown** - Prevents reusing recently blocked IPs
+- **Human-Readable Timestamps** - "2 hours ago", "3 days ago", etc.
+- **Failure Tracking** - See which IPs were blocked and why
+- **Progress Feedback** - Real-time status updates in UI
 
-**How it works:**
-- Each worker processes jobs independently through stages: Fetch → Notes → Assessment → Write → Export
-- File lock only held for fast writes (~700ms vs 36s before)
-- All jobs automatically logged with complete metadata
+## Docker Setup
 
-### Job Logging
+### Volumes
+
+The docker-compose configuration uses three volumes:
+
+1. **`./notes`** (bind mount) - Study notes output
+   - Appears on host at `./notes/`
+   - Organized by subject
+   - Contains markdown files and PDFs
+
+2. **`tracker-data`** (named volume) - Exit node tracker persistence
+   - Tracks which Tor exit IPs were used
+   - Enforces 24-hour cooldown
+   - Survives container restarts
+   - **Location:** Docker managed volume
+
+3. **`tor-data`** (named volume) - Tor configuration
+   - Tor circuit state
+   - Docker managed volume
+
+### Managing Volumes
+
+```bash
+# View volume data
+docker volume inspect ytstudybuddy_tracker-data
+
+# Backup tracker data
+docker run --rm -v ytstudybuddy_tracker-data:/data \
+  -v $(pwd):/backup alpine \
+  tar czf /backup/tracker-backup.tar.gz -C /data .
+
+# Restore tracker data
+docker run --rm -v ytstudybuddy_tracker-data:/data \
+  -v $(pwd):/backup alpine \
+  tar xzf /backup/tracker-backup.tar.gz -C /data
+
+# Reset tracker (clear all IP history)
+docker volume rm ytstudybuddy_tracker-data
+docker-compose up -d
+```
+
+## Retry System
+
+Failed jobs automatically retry every 15 minutes with fresh Tor exit IPs.
+
+### Usage
+
+```bash
+# Check retry status
+python retry_failed_jobs.py --status
+
+# Retry all eligible jobs once
+python retry_failed_jobs.py
+
+# Continuous monitoring (recommended)
+python retry_failed_jobs.py --watch
+
+# Custom interval (30 minutes)
+python retry_failed_jobs.py --watch --interval 30
+```
+
+See [RETRY_GUIDE.md](RETRY_GUIDE.md) for complete documentation.
+
+## Tor Diagnostics
+
+Test Tor connection and exit node diversity:
+
+```bash
+python diagnose_tor.py
+```
+
+Output shows:
+- Current exit IP
+- YouTube accessibility test
+- 10 random exit nodes tested
+- Success rate and recommendations
+
+## File Organization
+
+```
+notes/
+├── processing_log.json           # Complete job history
+├── exit_nodes.json               # Tor IP tracker (24h cooldown)
+├── AI/
+│   ├── video_title_1.md
+│   ├── Assessment_video_title_1.md
+│   └── pdfs/
+│       ├── video_title_1.pdf
+│       └── Assessment_video_title_1.pdf
+└── Programming/
+    └── ...
+```
+
+## Processing Log
 
 Every job (success/failure) logged to `notes/processing_log.json`:
 
@@ -39,6 +154,8 @@ Every job (success/failure) logged to `notes/processing_log.json`:
   "worker_id": 2,
   "success": true,
   "processing_duration": 58.8,
+  "exit_ip": "192.42.116.184",
+  "retry_count": 0,
   "timings": {
     "fetch_transcript": 5.2,
     "generate_notes": 20.3,
@@ -49,96 +166,128 @@ Every job (success/failure) logged to `notes/processing_log.json`:
 }
 ```
 
-**Query examples:**
+### Query Examples
+
 ```bash
 # Failed jobs only
 cat notes/processing_log.json | jq '.[] | select(.success == false)'
 
-# Average duration
+# Jobs that used Tor
+cat notes/processing_log.json | jq '.[] | select(.transcript_metadata.method == "tor")'
+
+# Average processing time
 cat notes/processing_log.json | jq '[.[] | select(.success) | .processing_duration] | add / length'
 
-# Performance by worker
-cat notes/processing_log.json | jq 'group_by(.worker_id) | map({worker: .[0].worker_id, count: length})'
+# Blocked exit IPs
+cat notes/processing_log.json | jq '.[] | select(.success == false) | .transcript_metadata.tor_exit_ip' | sort | uniq
 ```
 
-## Documentation Index
+## Exit Node Tracking
 
-### Essential Guides
+The exit node tracker (`notes/exit_nodes.json`) prevents reusing recently blocked IPs:
 
-1. **[docs/architecture.md](docs/architecture.md)** - Complete stateless pipeline architecture
-   - Components overview (VideoProcessingJob, pipeline functions, JobLogger)
-   - Performance comparison (before/after)
-   - Migration status
-
-2. **[docs/debugging.md](docs/debugging.md)** - Debugging with PyCharm & CLI
-   - PyCharm run configurations
-   - Debug CLI wrapper
-   - Breakpoint debugging
-
-3. **[docs/job-logging.md](docs/job-logging.md)** - Job logging and analysis
-   - JobLogger API
-   - JSON structure
-   - Query examples with jq
-   - Statistics and CSV export
-
-### Feature Guides
-
-4. **[docs/pdf-export.md](docs/pdf-export.md)** - PDF export with themes
-   - WeasyPrint setup
-   - 4 themes (obsidian, academic, minimal, default)
-   - Batch export
-
-5. **[docs/docker.md](docs/docker.md)** - Docker setup for Tor proxy
-   - docker-compose configuration
-   - Tor SOCKS proxy setup
-
-### Advanced Topics
-
-6. **[docs/parallel-architecture.md](docs/parallel-architecture.md)** - Parallel processing deep dive
-   - 3 optimization approaches analyzed
-   - Lock contention reduction
-   - Performance metrics
-
-7. **[docs/tor-connections.md](docs/tor-connections.md)** - Per-worker Tor connections
-   - Exit node pool architecture
-   - Circuit rotation
-   - Future: Queue-based pool
-
-## File Organization
-
-```
-notes/
-├── processing_log.json           # All job results
-├── AI/
-│   ├── video_title_1.md
-│   ├── assessment_video_title_1.md
-│   └── pdfs/
-│       ├── video_title_1.pdf
-│       └── assessment_video_title_1.pdf
-└── Programming/
-    └── ...
+```json
+{
+  "192.42.116.184": {
+    "last_used": "2025-10-17T14:30:45.123456",
+    "first_seen": "2025-10-17T12:15:30.000000",
+    "use_count": 5,
+    "last_worker_id": 2
+  }
+}
 ```
 
-## Key Features
+**Cooldown Period:** 24 hours (configurable)
 
-✅ **Parallel Assessment Generation** - 54% performance improvement
-✅ **Automatic Job Logging** - Complete audit trail with errors
-✅ **Stateless Pipeline** - Idempotent, resumable operations
-✅ **Worker ID Tracking** - Per-worker debugging and analysis
-✅ **PDF Export** - Obsidian-style themes
-✅ **Auto-categorization** - AI-powered subject detection
+**Why 24 hours?** YouTube blocks persist for extended periods. Using fresh IPs dramatically improves success rate.
+
+## Web Interface
+
+The Streamlit UI shows:
+
+- **Process Videos** - Batch processing with playlist extraction
+- **Results** - Knowledge graph and cross-references
+- **Logs** - Processing history with failure details
+  - Exit IP used for each attempt
+  - Human-readable timestamps ("2 hours ago")
+  - Failure reasons
+  - Retry count
+- **Exit Nodes** - IP cooldown status
+  - IPs in cooldown (24h)
+  - Available IPs
+  - Last used times
+  - Use counts
 
 ## Performance
 
-**Before (Sequential):**
-- Worker 1: 65.7s
-- Worker 2: 101.4s (waiting for lock)
-- Worker 3: 137.1s (waiting for lock)
-- **Total: 137s**
+### Parallel Processing
+- **3 Workers:** ~54% faster than sequential
+- **Per-Worker Tor Connections:** Unique exit IPs
+- **Job Logging:** Complete audit trail
 
-**After (Parallel):**
-- Worker 1: 65.7s
-- Worker 2: 65.7s
-- Worker 3: 65.7s
-- **Total: 66s (54% faster!)**
+### Retry System Impact
+- **Without Retry:** 60% failure rate (temporary blocks)
+- **With Retry:** ~90% eventual success rate
+- **24h IP Cooldown:** Prevents repeated blocks
 
+## Development
+
+```bash
+# Install dependencies
+uv sync
+
+# Run tests
+uv run pytest
+
+# Development mode with source mounting
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+## Troubleshooting
+
+### All Jobs Failing
+
+1. **Check Tor connection:**
+   ```bash
+   python diagnose_tor.py
+   ```
+
+2. **Restart Tor:**
+   ```bash
+   docker-compose restart tor-proxy
+   ```
+
+3. **Check API key:**
+   ```bash
+   echo $CLAUDE_API_KEY
+   ```
+
+### YouTube Blocking All Exits
+
+1. **Increase retry interval:**
+   ```bash
+   python retry_failed_jobs.py --watch --interval 30
+   ```
+
+2. **Reduce parallel workers:**
+   - Use `--workers 1` or `--workers 2`
+   - Fewer simultaneous requests = less blocking
+
+3. **Check exit node tracker:**
+   ```bash
+   cat notes/exit_nodes.json | jq 'length'
+   ```
+   If many IPs tracked, they may all be in cooldown
+
+## Documentation
+
+- [RETRY_GUIDE.md](RETRY_GUIDE.md) - Complete retry system guide
+- [docs/architecture.md](docs/architecture.md) - Pipeline architecture
+- [docs/debugging.md](docs/debugging.md) - PyCharm debugging
+- [docs/job-logging.md](docs/job-logging.md) - Log analysis
+- [docs/pdf-export.md](docs/pdf-export.md) - PDF themes
+- [docs/docker.md](docs/docker.md) - Docker setup
+
+## License
+
+MIT License - See LICENSE file

@@ -13,6 +13,7 @@ services:
       - TOR_PORT=9050
     volumes:
       - ./notes:/app/notes
+      - tracker-data:/app/tracker
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     depends_on:
       tor-proxy:
@@ -44,6 +45,8 @@ services:
 volumes:
   tor-data:
     driver: local
+  tracker-data:
+    driver: local  # Persistent exit node tracker data
 
 # Two container setup:
 # - tor-proxy: Dedicated Tor proxy (dperson/torproxy)
@@ -53,3 +56,8 @@ volumes:
 # - Tor runs in separate network context (different docker network)
 # - May help avoid some YouTube blocking (separate IP context)
 # - dperson/torproxy has proven configuration
+#
+# Volumes:
+# - ./notes: Study notes output (bind mount to host)
+# - tracker-data: Exit node tracker persistence (named volume)
+# - tor-data: Tor configuration and state (named volume)

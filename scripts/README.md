@@ -22,10 +22,24 @@ This folder contains helper scripts for local development and testing. **These a
 
 ## Test Scripts
 
+### Development/Testing
 - `test_simple.py` - Simple 2-video test to verify Tor circuit rotation
 - `test_transcript.py` - Comprehensive transcript fetching test with different configs
+- `test_parallel_processing.py` - Test parallel worker setup
+- `test_parallel_optimization.py` - Parallel processing optimization tests
+- `test_exit_node_tracking.py` - Test exit node tracker functionality
+- `test_fallback.py` - Test fallback mechanisms
 - `test_tor_in_group.sh` - Test Tor access with group permissions
 - `fix_and_test.sh` - Quick test and fix script
+
+### Diagnostic Tools
+- `diagnose_tor.py` - Test Tor connection and exit node diversity
+- `diagnose_failures.py` - Analyze failure patterns in processing logs
+- `check_failures.py` - Quick failure check utility
+
+### Example Scripts
+- `example_job_logging.py` - Example of job logging functionality
+- `debug_cli.py` - Debug wrapper for CLI commands (PyCharm debugging)
 
 ### Usage
 
@@ -35,6 +49,12 @@ This folder contains helper scripts for local development and testing. **These a
 
 # Run comprehensive test
 ./scripts/run_with_tor.sh python scripts/test_transcript.py
+
+# Diagnose Tor connection
+uv run python scripts/diagnose_tor.py
+
+# Check for failed jobs
+uv run python scripts/check_failures.py
 ```
 
 ## Docker Users

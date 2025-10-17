@@ -11,6 +11,54 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 
+def humanize_timedelta(td: timedelta) -> str:
+    """
+    Convert timedelta to human-readable format.
+
+    Examples:
+        - "2 months 3 days ago"
+        - "5 hours ago"
+        - "just now"
+
+    Args:
+        td: Time delta to humanize
+
+    Returns:
+        Human-readable string
+    """
+    seconds = int(td.total_seconds())
+
+    if seconds < 60:
+        return "just now"
+
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+
+    days = hours // 24
+    if days < 30:
+        return f"{days} day{'s' if days != 1 else ''} ago"
+
+    months = days // 30
+    remaining_days = days % 30
+
+    if months < 12:
+        if remaining_days > 0:
+            return f"{months} month{'s' if months != 1 else ''} {remaining_days} day{'s' if remaining_days != 1 else ''} ago"
+        return f"{months} month{'s' if months != 1 else ''} ago"
+
+    years = months // 12
+    remaining_months = months % 12
+
+    if remaining_months > 0:
+        return f"{years} year{'s' if years != 1 else ''} {remaining_months} month{'s' if remaining_months != 1 else ''} ago"
+    return f"{years} year{'s' if years != 1 else ''} ago"
+
+
 class ExitNodeTracker:
     """
     Thread-safe persistent tracker for Tor exit node usage.
@@ -172,6 +220,28 @@ class ExitNodeTracker:
                 elapsed = (datetime.now() - last_used).total_seconds()
                 remaining = self.cooldown_seconds - elapsed
                 return max(0, remaining) if remaining > 0 else None
+
+            except (KeyError, ValueError):
+                return None
+
+    def get_time_since_last_use(self, exit_ip: str) -> Optional[str]:
+        """
+        Get human-readable time since IP was last used.
+
+        Args:
+            exit_ip: Exit IP address
+
+        Returns:
+            Human-readable string like "2 hours ago" or None if never used
+        """
+        with self._lock:
+            if exit_ip not in self._data:
+                return None
+
+            try:
+                last_used = datetime.fromisoformat(self._data[exit_ip]['last_used'])
+                time_since = datetime.now() - last_used
+                return humanize_timedelta(time_since)
 
             except (KeyError, ValueError):
                 return None

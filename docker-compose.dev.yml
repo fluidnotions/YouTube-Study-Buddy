@@ -23,6 +23,7 @@ services:
       - ./notes:/app/notes
       - ./src:/app/src  # Mount source for live development
       - ./streamlit_app.py:/app/streamlit_app.py  # Mount streamlit app
+      - tracker-data-dev:/app/tracker  # Persistent exit node tracker
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     depends_on:
       tor-proxy:
@@ -47,3 +48,5 @@ services:
 volumes:
   tor-data-dev:
     driver: local
+  tracker-data-dev:
+    driver: local  # Persistent exit node tracker data

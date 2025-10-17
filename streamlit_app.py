@@ -234,16 +234,24 @@ def display_processing_log(base_dir="notes"):
                 if metadata and isinstance(metadata, dict):
                     exit_ip = metadata.get('tor_exit_ip', metadata.get('exit_ip', ''))
 
+            # Get title safely
+            title = job.get('video_title') or job.get('title') or 'N/A'
+            title_display = title[:40] + ('...' if len(title) > 40 else '')
+
+            # Get timestamp safely
+            timestamp = job.get('logged_at') or job.get('timestamp') or 'N/A'
+            timestamp_display = timestamp[:19] if timestamp != 'N/A' else 'N/A'
+
             df_data.append({
                 'Status': '✅' if job.get('success') else '❌',
                 'Video ID': job.get('video_id', 'unknown'),
-                'Title': job.get('video_title', job.get('title', 'N/A'))[:40] + ('...' if len(job.get('video_title', job.get('title', ''))) > 40 else ''),
+                'Title': title_display,
                 'Method': job.get('transcript_metadata', {}).get('method', 'unknown') if job.get('transcript_metadata') else 'unknown',
                 'Duration (s)': f"{job.get('processing_duration', 0):.1f}",
                 'Exit IP': exit_ip if exit_ip else 'N/A',
                 'Failure Reason': failure_reason if failure_reason else '-',
                 'Worker': job.get('worker_id', 'N/A'),
-                'Timestamp': job.get('logged_at', job.get('timestamp', 'N/A'))[:19] if job.get('logged_at') or job.get('timestamp') else 'N/A'
+                'Timestamp': timestamp_display
             })
 
         df = pd.DataFrame(df_data)

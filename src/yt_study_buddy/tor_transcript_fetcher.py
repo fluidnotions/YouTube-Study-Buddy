@@ -19,6 +19,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 
 from .ytdlp_fallback import YtDlpFallback
 from .debug_logger import get_logger
+from .exit_node_tracker import get_tracker
 
 
 class TorExitNodePool:
@@ -91,7 +92,8 @@ class TorExitNodePool:
         base_control_port: int = 9051,
         tor_control_password: Optional[str] = None,
         enforce_unique_exits: bool = True,
-        max_rotation_attempts: int = 10
+        max_rotation_attempts: int = 10,
+        cooldown_hours: float = 1.0
     ):
         """
         Initialize exit node pool.
@@ -104,6 +106,7 @@ class TorExitNodePool:
             tor_control_password: Password for Tor control ports
             enforce_unique_exits: If True, ensures each connection uses a different exit IP
             max_rotation_attempts: Maximum attempts to find unique exit node
+            cooldown_hours: Hours before an exit IP can be reused (default: 1.0)
         """
         self.pool_size = pool_size
         self.tor_host = tor_host
@@ -122,10 +125,18 @@ class TorExitNodePool:
         self._active_exit_ips: Dict[int, str] = {}  # connection_id -> exit_ip
         self._exit_ip_lock = threading.Lock()
 
+        # Get persistent tracker for 1-hour cooldown enforcement
+        self._tracker = get_tracker(cooldown_hours=cooldown_hours)
+
         print(f"Initialized TorExitNodePool with {pool_size} connections")
         print(f"SOCKS ports: {base_socks_port}-{base_socks_port + pool_size - 1}")
         print(f"Control ports: {base_control_port}-{base_control_port + pool_size - 1}")
         print(f"Unique exit enforcement: {'ENABLED' if enforce_unique_exits else 'DISABLED'}")
+
+        # Show persistent tracker stats
+        tracker_stats = self._tracker.get_stats()
+        print(f"Exit node tracker: {tracker_stats['in_cooldown']} IPs in cooldown, "
+              f"{tracker_stats['available']} available")
 
     def _get_exit_ip(self, fetcher: 'TorTranscriptFetcher', connection_id: int) -> Optional[str]:
         """
@@ -158,7 +169,8 @@ class TorExitNodePool:
         worker_id: Optional[int] = None
     ) -> bool:
         """
-        Ensure this connection has a unique exit IP not used by other active connections.
+        Ensure this connection has a unique exit IP not used by other active connections
+        or within the cooldown period (persistent across app restarts).
 
         Rotates circuit until a unique IP is found or max attempts reached.
 
@@ -186,29 +198,38 @@ class TorExitNodePool:
                     return True
                 continue
 
-            # Check if this IP is already in use by another connection
+            # Check both: (1) active connections AND (2) persistent cooldown
             with self._exit_ip_lock:
                 # Get all active IPs except our own connection
-                other_ips = {
+                other_active_ips = {
                     ip for cid, ip in self._active_exit_ips.items()
                     if cid != connection_id
                 }
 
-                if exit_ip not in other_ips:
-                    # Unique IP found! Register it
-                    self._active_exit_ips[connection_id] = exit_ip
-                    print(f"  ✓ {worker_label}: Unique exit IP secured: {exit_ip}")
-                    return True
+                # Check if already in use by another active connection
+                if exit_ip in other_active_ips:
+                    print(f"  ⚠ {worker_label}: Exit IP {exit_ip} already in use by another active worker")
+                    print(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
+                    fetcher.rotate_tor_circuit()
+                    time.sleep(2)
+                    continue
 
-            # IP collision - rotate circuit and retry
-            print(f"  ⚠ {worker_label}: Exit IP {exit_ip} already in use by another worker")
-            print(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
+                # Check persistent cooldown (reused within last hour)
+                if not self._tracker.is_available(exit_ip):
+                    cooldown_remaining = self._tracker.get_cooldown_remaining(exit_ip)
+                    minutes_remaining = int(cooldown_remaining / 60) if cooldown_remaining else 0
+                    print(f"  ⚠ {worker_label}: Exit IP {exit_ip} in cooldown "
+                          f"({minutes_remaining}m remaining)")
+                    print(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
+                    fetcher.rotate_tor_circuit()
+                    time.sleep(2)
+                    continue
 
-            # Rotate circuit to get new exit node
-            fetcher.rotate_tor_circuit()
-
-            # Wait a bit for new circuit to stabilize
-            time.sleep(2)
+                # Unique IP found AND not in cooldown! Register it
+                self._active_exit_ips[connection_id] = exit_ip
+                self._tracker.record_use(exit_ip, worker_id=worker_id)
+                print(f"  ✓ {worker_label}: Unique exit IP secured: {exit_ip}")
+                return True
 
         print(f"  ✗ {worker_label}: Could not obtain unique exit IP after "
               f"{self.max_rotation_attempts} attempts")
@@ -345,7 +366,7 @@ class TorExitNodePool:
         print(f"✓ Released Tor connection #{connection_id}")
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get pool statistics including unique exit IPs."""
+        """Get pool statistics including unique exit IPs and persistent tracker info."""
         with self._lock:
             in_use_count = len(self._in_use)
             available_count = len(self._available)
@@ -354,6 +375,9 @@ class TorExitNodePool:
             active_ips = list(self._active_exit_ips.values())
             unique_ips = len(set(active_ips))
 
+        # Get persistent tracker stats
+        tracker_stats = self._tracker.get_stats()
+
         return {
             'pool_size': self.pool_size,
             'available': available_count,
@@ -361,7 +385,8 @@ class TorExitNodePool:
             'utilization': in_use_count / self.pool_size if self.pool_size > 0 else 0,
             'active_exit_ips': active_ips,
             'unique_exit_ips': unique_ips,
-            'all_unique': unique_ips == in_use_count if in_use_count > 0 else True
+            'all_unique': unique_ips == in_use_count if in_use_count > 0 else True,
+            'tracker': tracker_stats  # Include persistent tracker stats
         }
 
 
@@ -395,6 +420,9 @@ class TorTranscriptFetcher:
         self.tor_control_password = tor_control_password
         self.ytdlp_fallback = YtDlpFallback()
 
+        # Track if control port is available (set to False after first failure)
+        self._control_port_available = True
+
     def rotate_tor_circuit(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
         Request a new Tor circuit (new exit node) with retry logic.
@@ -406,6 +434,10 @@ class TorTranscriptFetcher:
         Returns:
             True if circuit was rotated successfully, False otherwise
         """
+        # Skip if we already know control port is unavailable
+        if not self._control_port_available:
+            return False
+
         for attempt in range(max_retries):
             try:
                 with Controller.from_port(
@@ -428,18 +460,20 @@ class TorTranscriptFetcher:
             except (ConnectionRefusedError, OSError, SocketError) as e:
                 # Connection errors - Tor might not be running yet or temporarily down
                 if attempt < max_retries - 1:
-                    print(f"Tor control port not ready (attempt {attempt + 1}/{max_retries}): {e}")
+                    print(f"Tor control port not ready (attempt {attempt + 1}/{max_retries})")
                     print(f"Retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
                 else:
-                    print(f"Warning: Could not connect to Tor control port after {max_retries} attempts: {e}")
-                    print("Tor control port may not be running or accessible.")
-                    print("Continuing with existing circuit...")
+                    # Mark control port as unavailable to stop future attempts
+                    self._control_port_available = False
+                    print(f"⚠️  Tor control port unavailable after {max_retries} attempts")
+                    print("Circuit rotation disabled - will use fixed exit nodes")
 
             except Exception as e:
                 # Authentication errors or other issues - don't retry
-                print(f"Warning: Could not rotate Tor circuit: {e}")
-                print("Continuing with existing circuit...")
+                self._control_port_available = False
+                print(f"⚠️  Tor circuit rotation failed: {type(e).__name__}")
+                print("Circuit rotation disabled - will use fixed exit nodes")
                 return False
 
         return False
@@ -556,7 +590,8 @@ class TorTranscriptFetcher:
                     'transcript': transcript_text,
                     'duration': duration_info,
                     'length': len(transcript_text),
-                    'segments': transcript_list  # Include raw segments for advanced use
+                    'segments': transcript_list,  # Include raw segments for advanced use
+                    'method': 'tor'  # Mark as Tor success
                 }
 
             except (requests.exceptions.Timeout, socket.timeout) as e:
@@ -599,6 +634,9 @@ class TorTranscriptFetcher:
 
         if result:
             print("✓ Successfully fetched via Tor")
+            # Ensure method is set
+            if 'method' not in result:
+                result['method'] = 'tor'
             return result
         else:
             print("✗ Tor fetch failed")
@@ -611,6 +649,8 @@ class TorTranscriptFetcher:
 
             if ytdlp_result:
                 print("✓ Successfully fetched via yt-dlp fallback")
+                # Mark as yt-dlp method
+                ytdlp_result['method'] = 'yt-dlp'
                 return ytdlp_result
             else:
                 print("✗ YT-DLP fallback also failed")

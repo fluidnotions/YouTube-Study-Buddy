@@ -1,6 +1,26 @@
 # YouTube Study Buddy
 
-Transform YouTube videos into organized study notes with AI-powered analysis, automatic retry, and Tor-based transcript fetching.
+Learning from educational YouTube videos and want to maximize retention and build meaningful connections? **YT Study Buddy** transforms any YouTube video into structured study notes with intelligent cross-referencing that builds your personal knowledge graph over time, turning scattered video content into an interconnected learning system.
+
+## 🧠 The Science: Active Learning vs Passive Watching
+
+**Traditional passive note-taking** often leads to the "illusion of competence" – where learners feel they understand content simply because they've transcribed it. YT Study Buddy implements research-backed learning principles:
+
+- **Dual Coding Theory** – Combines text with visual spatial organization for stronger memory formation
+- **Generation Effect** – Assessment questions force active answer generation, improving retention
+- **Desirable Difficulties** – "One-up" challenges introduce productive struggle beyond the presented material
+- **Elaborative Interrogation** – Gap analysis questions reveal what your brain filtered out
+- **Spaced Retrieval Practice** – Separation of note generation from video watching enables spaced review
+
+**Result:** Instead of passive consumption, you get an active learning system with notes AND assessment questions that test understanding beyond surface-level recall.
+
+## 💰 Free vs Paid Alternatives
+
+**Paid ($10-50+/month):** NoteGPT, Notta, Eightify, Maestra – all require subscriptions for full features
+
+**Free (Limited):** Basic transcripts, no AI analysis, no cross-referencing, no assessments
+
+**YT Study Buddy:** Completely free with AI-powered notes, learning assessments, auto-categorization, and knowledge graph building. No subscriptions, no limits.
 
 ## Quick Start
 
@@ -39,16 +59,9 @@ cat notes/processing_log.json | jq '.'
 - 🤖 **AI-Powered Notes** - Claude Sonnet 4.5 generates comprehensive study materials
 - 📝 **Learning Assessments** - Automatic quiz generation with gap analysis
 - 🔄 **Automatic Retry** - 15-minute retry system for failed jobs (see [RETRY_GUIDE.md](RETRY_GUIDE.md))
-- 🌐 **Tor Integration** - Bypass rate limits with rotating exit nodes
 - 🏷️ **Auto-Categorization** - ML-based subject detection
 - 📊 **Knowledge Graph** - Cross-reference related concepts
 - 📄 **PDF Export** - Multiple themes (Obsidian, Academic, Minimal)
-
-### Reliability Features
-- **24-Hour Exit IP Cooldown** - Prevents reusing recently blocked IPs
-- **Human-Readable Timestamps** - "2 hours ago", "3 days ago", etc.
-- **Failure Tracking** - See which IPs were blocked and why
-- **Progress Feedback** - Real-time status updates in UI
 
 ## Docker Setup
 

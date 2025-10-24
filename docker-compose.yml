@@ -4,6 +4,7 @@ services:
   youtube-study-buddy:
     image: fluidnotions/youtube-study-buddy:latest
     container_name: youtube-study-buddy
+    pull_policy: always
     ports:
       - "8501:8501"
     env_file:

@@ -11,9 +11,17 @@ LABEL org.opencontainers.image.version="latest"
 WORKDIR /app
 
 # Install system dependencies
+# WeasyPrint requires: libgobject, libpango, libcairo, libgdk-pixbuf, shared-mime-info
 RUN apt-get update && apt-get install -y \
     git \
     curl \
+    libgobject-2.0-0 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0 \
+    shared-mime-info \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Install UV package manager

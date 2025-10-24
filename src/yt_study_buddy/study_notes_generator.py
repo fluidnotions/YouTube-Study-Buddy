@@ -4,6 +4,7 @@ Study notes generation using Claude API with cross-referencing capabilities.
 import os
 
 from dotenv import load_dotenv
+from loguru import logger
 
 try:
     import anthropic
@@ -32,22 +33,22 @@ class StudyNotesGenerator:
         """Get Claude API key from environment or .env file."""
         api_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
-            print("\\nERROR: Claude API key not found!")
-            print("Please set your API key in one of these ways:")
-            print("1. Create a .env file with: CLAUDE_API_KEY=your_key_here")
-            print("2. Set environment variable: CLAUDE_API_KEY=your_key_here")
-            print("3. Set environment variable: ANTHROPIC_API_KEY=your_key_here")
-            print("\\nGet your API key from: https://console.anthropic.com/")
+            logger.error("\\nERROR: Claude API key not found!")
+            logger.info("Please set your API key in one of these ways:")
+            logger.info("1. Create a .env file with: CLAUDE_API_KEY=your_key_here")
+            logger.info("2. Set environment variable: CLAUDE_API_KEY=your_key_here")
+            logger.info("3. Set environment variable: ANTHROPIC_API_KEY=your_key_here")
+            logger.info("\\nGet your API key from: https://console.anthropic.com/")
             return None
         return api_key
 
     def is_ready(self):
         """Check if the generator is ready to use."""
         if not anthropic:
-            print("ERROR: anthropic library not installed. Run: pip install anthropic")
+            logger.error("ERROR: anthropic library not installed. Run: pip install anthropic")
             return False
         if not self.client:
-            print("ERROR: No valid API key found")
+            logger.error("ERROR: No valid API key found")
             return False
         return True
 
@@ -110,16 +111,25 @@ Respond with ONLY the title, nothing else."""
             return title
 
         except Exception as e:
-            print(f"⚠️  AI title generation failed: {e}")
+            logger.error(f"⚠️  AI title generation failed: {e}")
             return None
 
-    def generate_notes(self, transcript, related_notes=None):
-        """Generate study notes from transcript with optional cross-references."""
+    def generate_notes(self, transcript, related_notes=None, suggest_title=False):
+        """Generate study notes from transcript with optional cross-references.
+
+        Args:
+            transcript: Video transcript text
+            related_notes: Optional list of related notes for cross-referencing
+            suggest_title: If True, asks Claude to suggest a descriptive title
+
+        Returns:
+            Generated notes text (may include title if suggest_title=True)
+        """
         if not self.is_ready():
             return None
 
         try:
-            prompt = self._build_prompt(transcript, related_notes)
+            prompt = self._build_prompt(transcript, related_notes, suggest_title)
             model = os.getenv('GENERATE_NOTES_MODEL', 'claude-sonnet-4-5-20250929')
             message = self.client.messages.create(
                 model=model,
@@ -133,11 +143,17 @@ Respond with ONLY the title, nothing else."""
             return message.content[0].text
 
         except Exception as e:
-            print(f"ERROR calling Claude API: {e}")
+            logger.error(f"ERROR calling Claude API: {e}")
             return None
 
-    def _build_prompt(self, transcript, related_notes=None):
-        """Build the prompt for Claude API."""
+    def _build_prompt(self, transcript, related_notes=None, suggest_title=False):
+        """Build the prompt for Claude API.
+
+        Args:
+            transcript: Video transcript text
+            related_notes: Optional list of related notes for cross-referencing
+            suggest_title: If True, asks Claude to suggest a descriptive title
+        """
         # Build related notes context if available
         related_context = ""
         if related_notes:
@@ -152,7 +168,26 @@ Respond with ONLY the title, nothing else."""
         if related_notes:
             connections_instruction = " Also note connections to related study notes listed below - mention which notes cover similar topics and how they might connect."
 
+        # Title suggestion instruction
+        title_instruction = ""
+        if suggest_title:
+            title_instruction = """
+IMPORTANT: Start your response with a descriptive title for this video on the first line as:
+# Title: <your suggested title here>
+
+The title should:
+- Be 5-10 words maximum
+- Describe the main topic/subject clearly
+- Be specific and informative
+- Use title case
+- No quotes or special characters
+
+Then continue with the study notes below.
+
+"""
+
         prompt = f"""Create comprehensive educational notes from this YouTube video transcript. Format this for learning and mind mapping.
+{title_instruction}
 
 # Video Study Notes
 
@@ -192,18 +227,31 @@ I'm going to be using them to annotate and highlight sections and connect them t
     def extract_title_from_notes(study_notes):
         """
         Extract the video title from Claude's generated notes.
-        Claude generates notes starting with '# Video Study Notes: <title>'
-        or '# VIDEO STUDY NOTES: <title>'.
+
+        Looks for patterns:
+        - '# Title: <title>' (when suggest_title=True)
+        - '# Video Study Notes: <title>'
+        - '# VIDEO STUDY NOTES: <title>'
 
         Returns:
-            Extracted title or None if not found
+            Tuple of (extracted_title, notes_without_title) or (None, study_notes)
         """
         import re
-        # Look for the pattern at the start of the notes
+
+        # Try to match "# Title: ..." pattern first (suggest_title format)
+        match = re.search(r'^#\s+Title:\s*(.+)$', study_notes, re.MULTILINE | re.IGNORECASE)
+        if match:
+            title = match.group(1).strip()
+            # Remove the title line from notes
+            notes_without_title = re.sub(r'^#\s+Title:\s*.+\n*', '', study_notes, count=1, flags=re.MULTILINE | re.IGNORECASE)
+            return title, notes_without_title.strip()
+
+        # Try old pattern for backward compatibility
         match = re.search(r'^#\s+(?:VIDEO\s+)?[Vv]ideo\s+[Ss]tudy\s+[Nn]otes:\s*(.+)$', study_notes, re.MULTILINE)
         if match:
-            return match.group(1).strip()
-        return None
+            return match.group(1).strip(), study_notes
+
+        return None, study_notes
 
     def create_markdown_file(self, title, video_url, study_notes, output_dir="Study notes", video_id=None):
         """Create a markdown file with the study notes."""

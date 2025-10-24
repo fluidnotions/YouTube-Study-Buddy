@@ -3,6 +3,7 @@ Knowledge graph for managing concept indexing and cross-references between study
 """
 import os
 import re
+from loguru import logger
 
 
 class KnowledgeGraph:
@@ -73,7 +74,7 @@ class KnowledgeGraph:
                         }
 
                 except Exception as e:
-                    print(f"Warning: Could not process {filename}: {e}")
+                    logger.error(f"Warning: Could not process {filename}: {e}")
                     continue
 
         # Cache the results

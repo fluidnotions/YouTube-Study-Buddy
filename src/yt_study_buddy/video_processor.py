@@ -6,6 +6,7 @@ import re
 from typing import Optional
 
 from .transcript_provider import TranscriptProvider, create_transcript_provider
+from loguru import logger
 
 
 class VideoProcessor:
@@ -47,11 +48,11 @@ class VideoProcessor:
     def get_transcript(self, video_id: str) -> dict:
         """Get transcript using Tor provider."""
         try:
-            print(f"  Using Tor provider...")
+            logger.info(f"  Using Tor provider...")
             return self.provider.get_transcript(video_id)
         except Exception as e:
-            print(f"  Tor provider failed: {e}")
-            print("  Make sure Tor proxy is running (docker-compose up -d tor-proxy)")
+            logger.error(f"  Tor provider failed: {e}")
+            logger.info("  Make sure Tor proxy is running (docker-compose up -d tor-proxy)")
             raise
 
     @staticmethod

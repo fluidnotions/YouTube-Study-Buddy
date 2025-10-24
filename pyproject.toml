@@ -30,6 +30,7 @@ dependencies = [
     "python-Levenshtein>=0.21.0",
     "weasyprint>=60.0",
     "markdown2>=2.4.0",
+    "loguru>=0.7.0",
 ]
 
 [project.optional-dependencies]

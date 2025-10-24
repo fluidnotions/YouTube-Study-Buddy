@@ -1,0 +1,50 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+Copyright (C) 2025 YouTube Study Buddy Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+================================================================================
+
+FULL LICENSE TEXT
+
+The complete text of the GNU Affero General Public License v3.0 can be found at:
+https://www.gnu.org/licenses/agpl-3.0.txt
+
+================================================================================
+
+ADDITIONAL PERMISSIONS
+
+Network Use Provision:
+If you run a modified version of this program as a network service (e.g., web
+application, API service), you must make the complete source code of your
+modified version available to users of that service.
+
+================================================================================
+
+THIRD-PARTY LICENSES
+
+This software uses the following third-party libraries, each with their own
+licenses:
+
+- anthropic (Apache-2.0)
+- loguru (MIT)
+- streamlit (Apache-2.0)
+- youtube-transcript-api (MIT)
+- yt-dlp (Unlicense)
+- weasyprint (BSD-3-Clause)
+- sentence-transformers (Apache-2.0)
+
+See the individual package documentation for their respective license terms.

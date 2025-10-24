@@ -20,7 +20,7 @@ current_dir = Path(__file__).parent
 src_dir = current_dir / "src"
 sys.path.insert(0, str(src_dir))
 
-from src.yt_study_buddy.app_interface import create_interface, StudyBuddyInterface
+from yt_study_buddy.app_interface import create_interface, StudyBuddyInterface
 
 
 def initialize_session_state():
@@ -323,7 +323,7 @@ def display_processing_log(base_dir="notes"):
 
 def display_exit_node_log(base_dir="notes"):
     """Display exit node tracker log."""
-    from src.yt_study_buddy.exit_node_tracker import humanize_timedelta
+    from yt_study_buddy.exit_node_tracker import humanize_timedelta
 
     st.subheader("🌐 Exit Node Usage")
 
@@ -539,107 +539,114 @@ def main():
 
         st.divider()
 
-    # Main content tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎬 Process Videos", "📊 Results", "📋 Logs", "❓ Help"])
+    # Main content tabs - only Process Videos tab is functional
+    # Other tabs (Results, Logs, Help) are removed due to incomplete implementation
+    # tab1, tab2, tab3, tab4 = st.tabs(["🎬 Process Videos", "📊 Results", "📋 Logs", "❓ Help"])
 
-    with tab1:
-        # Quick start hint
-        if st.session_state.show_quick_start:
-            col1, col2 = st.columns([5, 1])
-            with col1:
-                st.info("💡 **First time?** Use recommended settings below, or customize as needed.")
-            with col2:
-                if st.button("✕", help="Dismiss"):
-                    st.session_state.show_quick_start = False
-                    st.rerun()
+    # Simplified single-tab interface
+    st.markdown("---")  # Visual separator
 
-        # Processing Settings Section
-        st.subheader("⚙️ Processing Settings")
-
-        col1, col2 = st.columns(2)
-
+    # Quick start hint
+    if st.session_state.show_quick_start:
+        col1, col2 = st.columns([5, 1])
         with col1:
-            subject = st.text_input(
-                "📂 Subject",
-                placeholder="e.g., Machine Learning, Python, History (optional)",
-                help="Organize notes by subject. Leave blank to auto-categorize.",
-                disabled=st.session_state.processing
-            )
-
-            global_context = st.checkbox(
-                "🌐 Global cross-referencing",
-                value=True,
-                help="Find connections across all subjects vs. subject-only",
-                disabled=st.session_state.processing
-            )
-
+            st.info("💡 **First time?** Use recommended settings below, or customize as needed.")
         with col2:
-            # Feature toggles in 2x2 grid
-            col2a, col2b = st.columns(2)
-            with col2a:
-                generate_assessments = st.checkbox(
-                    "📝 Assessments",
-                    value=True,
-                    help="Generate learning questions",
-                    disabled=st.session_state.processing
-                )
-                auto_categorize = st.checkbox(
-                    "🏷️ Auto-categorize",
-                    value=True,
-                    help="Auto-detect subject (when blank)",
-                    disabled=st.session_state.processing
-                )
-            with col2b:
-                export_pdf = st.checkbox(
-                    "📄 Export PDF",
-                    value=False,
-                    help="Export notes and assessments to PDF",
-                    disabled=st.session_state.processing
-                )
-                if export_pdf:
-                    pdf_theme = st.selectbox(
-                        "PDF Theme",
-                        options=['obsidian', 'academic', 'minimal', 'default'],
-                        index=0,
-                        help="Choose PDF styling theme",
-                        disabled=st.session_state.processing,
-                        label_visibility="collapsed"
-                    )
-                else:
-                    pdf_theme = 'obsidian'
+            if st.button("✕", help="Dismiss"):
+                st.session_state.show_quick_start = False
+                st.rerun()
 
-        # Parallel processing settings
-        st.subheader("⚡ Performance Settings")
-        col1, col2 = st.columns(2)
-        with col1:
-            use_parallel = st.checkbox(
-                "🚀 Parallel Processing",
+    # Processing Settings Section
+    st.subheader("⚙️ Processing Settings")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        subject = st.text_input(
+            "📂 Subject",
+            placeholder="e.g., Machine Learning, Python, History (optional)",
+            help="Organize notes by subject. Leave blank to auto-categorize.",
+            disabled=st.session_state.processing
+        )
+
+        global_context = st.checkbox(
+            "🌐 Global cross-referencing",
+            value=True,
+            help="Find connections across all subjects vs. subject-only",
+            disabled=st.session_state.processing
+        )
+
+    with col2:
+        # Feature toggles in 2x2 grid
+        col2a, col2b = st.columns(2)
+        with col2a:
+            generate_assessments = st.checkbox(
+                "📝 Assessments",
                 value=True,
-                help="Process multiple videos simultaneously for faster batch operations",
+                help="Generate learning questions",
                 disabled=st.session_state.processing
             )
-        with col2:
-            if use_parallel:
-                max_workers = st.slider(
-                    "Workers",
-                    min_value=1,
-                    max_value=5,
-                    value=3,
-                    help="Number of concurrent processing tasks. More workers = faster but higher rate limit risk",
-                    disabled=st.session_state.processing
+            auto_categorize = st.checkbox(
+                "🏷️ Auto-categorize",
+                value=True,
+                help="Auto-detect subject (when blank)",
+                disabled=st.session_state.processing
+            )
+        with col2b:
+            export_pdf = st.checkbox(
+                "📄 Export PDF",
+                value=False,
+                help="Export notes and assessments to PDF",
+                disabled=st.session_state.processing
+            )
+            if export_pdf:
+                pdf_theme = st.selectbox(
+                    "PDF Theme",
+                    options=['obsidian', 'academic', 'minimal', 'default'],
+                    index=0,
+                    help="Choose PDF styling theme",
+                    disabled=st.session_state.processing,
+                    label_visibility="collapsed"
                 )
             else:
-                max_workers = 1
+                pdf_theme = 'obsidian'
 
-        st.divider()
+    # Parallel processing settings - DISABLED due to Tor conflicts
+    # st.subheader("⚡ Performance Settings")
+    # col1, col2 = st.columns(2)
+    # with col1:
+    #     use_parallel = st.checkbox(
+    #         "🚀 Parallel Processing",
+    #         value=True,
+    #         help="Process multiple videos simultaneously for faster batch operations",
+    #         disabled=st.session_state.processing
+    #     )
+    # with col2:
+    #     if use_parallel:
+    #         max_workers = st.slider(
+    #             "Workers",
+    #             min_value=1,
+    #             max_value=5,
+    #             value=3,
+    #             help="Number of concurrent processing tasks. More workers = faster but higher rate limit risk",
+    #             disabled=st.session_state.processing
+    #         )
+    #     else:
+    #         max_workers = 1
 
-        # Playlist Extraction Section
-        st.subheader("📋 Extract from YouTube Playlist (Optional)")
-        st.caption("ℹ️ Note: Playlist must be public or unlisted to extract URLs")
+    # Force single worker mode - parallel causes Tor connection race conditions
+    use_parallel = False
+    max_workers = 1
 
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            playlist_url = st.text_input(
+    st.divider()
+
+    # Playlist Extraction Section
+    st.subheader("📋 Extract from YouTube Playlist (Optional)")
+    st.caption("ℹ️ Note: Playlist must be public or unlisted to extract URLs")
+
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        playlist_url = st.text_input(
                 "Playlist URL",
                 placeholder="https://www.youtube.com/playlist?list=...",
                 help="Enter a YouTube playlist URL to extract all video URLs. Playlist must be public or unlisted.",
@@ -803,122 +810,8 @@ def main():
                     with st.sidebar:
                         display_knowledge_graph_stats(processor)
 
-    with tab2:
-        st.header("📊 Processing Results")
-
-        if st.session_state.processed_videos:
-            st.info(f"Total videos processed this session: {len(st.session_state.processed_videos)}")
-
-            for i, result in enumerate(reversed(st.session_state.processed_videos)):
-                with st.expander(f"📹 {result['title']}"):
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        st.write(f"**URL:** [Link]({result['url']})")
-                        st.write(f"**File:** {result['filename']}")
-                    with col2:
-                        st.metric("Related Notes", result['related_notes'])
-                        st.metric("Transcript Length", f"{result['transcript_length']:,}")
-        else:
-            st.info("No videos processed yet. Use the tabs above to get started!")
-
-        if st.button("🗑️ Clear Results"):
-            st.session_state.processed_videos = []
-            st.rerun()
-
-    # Add Knowledge Graph stats to sidebar
-    with st.sidebar:
-        if st.session_state.processed_videos:
-            # Create a dummy processor to show stats
-            output_base_dir = "notes"  # Fixed output directory
-            processor = create_processor(
-                None, True, True, True,
-                base_dir=output_base_dir
-            )
-            display_knowledge_graph_stats(processor)
-
-    with tab3:
-        st.header("📋 Logs & Monitoring")
-
-        # Use output_base_dir from sidebar (already defined above)
-        base_dir = output_base_dir
-
-        # Create subtabs for different log types
-        log_tab1, log_tab2 = st.tabs(["📋 Processing Log", "🌐 Exit Nodes"])
-
-        with log_tab1:
-            display_processing_log(base_dir=str(base_dir))
-
-        with log_tab2:
-            display_exit_node_log(base_dir=str(base_dir))
-
-    with tab4:
-        st.header("❓ Help & Information")
-
-        st.markdown("""
-        ### 🚀 Getting Started
-
-        1. **Set up your Claude API key** as an environment variable:
-           - `CLAUDE_API_KEY` or `ANTHROPIC_API_KEY`
-           - Get it from [console.anthropic.com](https://console.anthropic.com/)
-
-        2. **Configure processing settings** in the "Process Videos" tab:
-           - **Subject**: Organize notes by topic (optional - leave blank for auto-categorization)
-           - **Global cross-referencing**: Find connections across all subjects
-           - **Transcript method**: Choose API, Scraper, or Tor
-           - **Assessments**: Generate learning questions alongside notes
-           - **Auto-categorize**: Automatically detect and organize by subject
-
-        3. **Add video URLs**:
-           - **Option A - Extract from playlist**: Enter playlist URL → Click "Extract URLs"
-           - **Option B - Manual entry**: Paste URLs directly into the text area (one per line)
-           - **Tip**: You can mix both methods - extract playlist then edit the list
-
-        4. **Process and view results**:
-           - Click "🚀 Process Videos" to start
-           - View progress and results in the "Results" tab
-           - Files are saved to `notes/[Subject]/` folders
-
-        ### 📁 Output Structure
-
-        Notes are saved in organized folders:
-        ```
-        notes/
-        ├── [Subject Name]/
-        │   ├── video1_notes.md
-        │   └── video2_notes.md
-        └── [Another Subject]/
-            └── video3_notes.md
-        ```
-
-        ### 🔗 Features
-
-        - **AI-powered summarization** using Claude Sonnet 4.5
-        - **Learning assessments** with gap analysis and application questions
-        - **Auto-categorization** using ML-based subject detection
-        - **Playlist extraction** using yt-dlp for batch processing
-        - **Cross-referencing** between related notes
-        - **Obsidian integration** with automatic [[links]]
-        - **Knowledge graph** for concept tracking
-        - **Tor-based fetching** for reliable transcript access
-
-        ### 💡 Tips
-
-        - **Playlist processing**: Use the playlist extractor to quickly get all URLs from a YouTube playlist
-        - **Auto-categorization**: Leave subject blank and enable auto-categorize to let AI organize your notes
-        - **Assessments**: Enable assessments to get learning questions that test deeper understanding
-        - **Cross-referencing**: Global finds connections across all subjects, subject-only stays focused
-        - **Tor method**: For best results with rate limiting, use Tor with the tor-proxy container
-        - The tool automatically adds delays between batch requests to avoid rate limiting
-
-        ### 📦 Dependencies for Playlist Extraction
-
-        Install yt-dlp to enable playlist URL extraction:
-        ```bash
-        pip install yt-dlp
-        # or
-        uv pip install yt-dlp
-        ```
-        """)
+    # Removed non-working tabs: Results, Logs, Help
+    # Only Process Videos tab remains functional
 
 
 if __name__ == "__main__":

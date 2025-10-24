@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from loguru import logger
+
 from .video_job import VideoProcessingJob, ProcessingStage
 
 
@@ -36,7 +38,7 @@ def fetch_transcript_and_title(
     """
     # Check if already done
     if job.has_transcript():
-        print(f"  [Job {job.video_id}] Transcript already fetched, skipping")
+        logger.warning(f"  [Job {job.video_id}] Transcript already fetched, skipping")
         return job
 
     stage_start = time.time()
@@ -44,7 +46,7 @@ def fetch_transcript_and_title(
 
     try:
         # Fetch transcript
-        print(f"  [Job {job.video_id}] Fetching transcript...")
+        logger.info(f"  [Job {job.video_id}] Fetching transcript...")
         transcript_data = video_processor.get_transcript(job.video_id)
 
         if not transcript_data:
@@ -54,50 +56,31 @@ def fetch_transcript_and_title(
         job.transcript_data = transcript_data
 
         if transcript_data.get('duration'):
-            print(f"    Duration: {transcript_data['duration']}")
-        print(f"    Length: {transcript_data['length']} characters")
+            logger.info(f"    Duration: {transcript_data['duration']}")
+        logger.info(f"    Length: {transcript_data['length']} characters")
 
-        # Fetch title with status check
-        print(f"  [Job {job.video_id}] Fetching title...")
-        title_result = video_processor.get_video_title(
-            job.video_id,
-            worker_id=worker_id,
-            return_status=True
-        )
-
-        if isinstance(title_result, tuple):
-            job.video_title, title_success, title_error = title_result
-
-            # Log title fetch issues but continue processing
-            if not title_success and title_error:
-                print(f"    ⚠️  Title fetch failed: {title_error}")
-                print(f"    ⏳ Attempting AI title generation from transcript...")
-
-                # Try AI-powered title generation
-                try:
-                    from .study_notes_generator import StudyNotesGenerator
-                    temp_generator = StudyNotesGenerator()
-
-                    if temp_generator.is_ready():
-                        ai_title = temp_generator.suggest_title(job.transcript)
-                        if ai_title:
-                            job.video_title = ai_title
-                            print(f"    ✓ AI-generated title: {ai_title}")
-                        else:
-                            print(f"    ⚠️  AI title generation returned None")
-                            print(f"    Continuing with fallback: {job.video_title}")
-                    else:
-                        print(f"    ⚠️  AI service not ready")
-                        print(f"    Continuing with fallback: {job.video_title}")
-                except Exception as ai_error:
-                    print(f"    ⚠️  AI title generation failed: {ai_error}")
-                    print(f"    Continuing with fallback: {job.video_title}")
+        # Fetch title (non-critical - use video ID as fallback)
+        logger.info(f"  [Job {job.video_id}] Fetching title...")
+        title_fetched = False
+        try:
+            job.video_title = video_processor.get_video_title(
+                job.video_id,
+                worker_id=worker_id
+            )
+            if job.video_title and not job.video_title.startswith("Video_"):
+                logger.info(f"    Title: {job.video_title}")
+                title_fetched = True
             else:
-                print(f"    Title: {job.video_title}")
-        else:
-            # Backwards compatibility
-            job.video_title = title_result
-            print(f"    Title: {job.video_title}")
+                logger.warning(f"    ⚠️  Got fallback title, will use video ID")
+                job.video_title = f"Video_{job.video_id}"
+        except Exception as title_error:
+            # Title fetch failed - use video ID as fallback
+            logger.warning(f"    ⚠️  Title fetch failed: {title_error}")
+            logger.info(f"    Using video ID as fallback title")
+            job.video_title = f"Video_{job.video_id}"
+
+        # Mark that we need AI title generation later
+        job.needs_ai_title = not title_fetched
 
         job.set_stage(ProcessingStage.TRANSCRIPT_FETCHED)
         job.add_timing('fetch_transcript', time.time() - stage_start)
@@ -132,7 +115,7 @@ def generate_study_notes(
     """
     # Check if already done
     if job.has_notes():
-        print(f"  [Job {job.video_id}] Notes already generated, skipping")
+        logger.warning(f"  [Job {job.video_id}] Notes already generated, skipping")
         return job
 
     if not job.has_transcript():
@@ -142,15 +125,33 @@ def generate_study_notes(
     job.set_stage(ProcessingStage.GENERATING_NOTES)
 
     try:
-        print(f"  [Job {job.video_id}] Generating study notes...")
+        logger.info(f"  [Job {job.video_id}] Generating study notes...")
+
+        # Request title suggestion in the same call if needed (no extra LLM call)
         job.study_notes = notes_generator.generate_notes(
-            transcript=job.transcript
+            transcript=job.transcript,
+            suggest_title=job.needs_ai_title
         )
+
+        # Extract title from notes if it was requested
+        if job.needs_ai_title:
+            from .study_notes_generator import StudyNotesGenerator
+            extracted_title, cleaned_notes = StudyNotesGenerator.extract_title_from_notes(job.study_notes)
+
+            if extracted_title:
+                old_title = job.video_title
+                job.video_title = extracted_title
+                job.study_notes = cleaned_notes  # Use notes without the title line
+                job.needs_ai_title = False  # Mark as resolved
+                logger.success(f"    ✓ AI-generated title: {extracted_title}")
+                logger.debug(f"    (Replaced fallback: {old_title})")
+            else:
+                logger.warning(f"    ⚠️  Could not extract title from notes, keeping: {job.video_title}")
 
         job.set_stage(ProcessingStage.NOTES_GENERATED)
         job.add_timing('generate_notes', time.time() - stage_start)
 
-        print(f"    ✓ Notes generated ({len(job.study_notes)} chars)")
+        logger.success(f"    ✓ Notes generated ({len(job.study_notes)} chars)")
         return job
 
     except Exception as e:
@@ -177,21 +178,21 @@ def generate_assessment(
     """
     # Check if already done
     if job.has_assessment():
-        print(f"  [Job {job.video_id}] Assessment already generated, skipping")
+        logger.warning(f"  [Job {job.video_id}] Assessment already generated, skipping")
         return job
 
     if not job.has_notes():
         raise ValueError("Cannot generate assessment without notes")
 
     if not assessment_generator:
-        print(f"  [Job {job.video_id}] Assessment generation disabled, skipping")
+        logger.warning(f"  [Job {job.video_id}] Assessment generation disabled, skipping")
         return job
 
     stage_start = time.time()
     job.set_stage(ProcessingStage.GENERATING_ASSESSMENT)
 
     try:
-        print(f"  [Job {job.video_id}] Generating assessment...")
+        logger.info(f"  [Job {job.video_id}] Generating assessment...")
         job.assessment_content = assessment_generator.generate_assessment(
             job.transcript,
             job.study_notes,
@@ -202,12 +203,12 @@ def generate_assessment(
         job.set_stage(ProcessingStage.ASSESSMENT_GENERATED)
         job.add_timing('generate_assessment', time.time() - stage_start)
 
-        print(f"    ✓ Assessment generated ({len(job.assessment_content)} chars)")
+        logger.success(f"    ✓ Assessment generated ({len(job.assessment_content)} chars)")
         return job
 
     except Exception as e:
         # Assessment failure is not critical, just log and continue
-        print(f"    ✗ Assessment generation failed: {e}")
+        logger.error(f"    ✗ Assessment generation failed: {e}")
         job.assessment_content = None
         return job
 
@@ -237,7 +238,7 @@ def write_markdown_files(
     """
     # Check if already done
     if job.has_files_written():
-        print(f"  [Job {job.video_id}] Files already written, skipping")
+        logger.warning(f"  [Job {job.video_id}] Files already written, skipping")
         return job
 
     if not job.has_notes():
@@ -258,7 +259,7 @@ def write_markdown_files(
         markdown_content = job.get_markdown_content()
         job.notes_filepath.write_text(markdown_content, encoding='utf-8')
 
-        print(f"  [Job {job.video_id}] ✓ Notes saved: {job.notes_filepath.name}")
+        logger.success(f"  [Job {job.video_id}] ✓ Notes saved: {job.notes_filepath.name}")
 
         # Write assessment file if exists
         if job.assessment_content:
@@ -268,7 +269,7 @@ def write_markdown_files(
                 job.assessment_content,
                 encoding='utf-8'
             )
-            print(f"  [Job {job.video_id}] ✓ Assessment saved: {job.assessment_filepath.name}")
+            logger.success(f"  [Job {job.video_id}] ✓ Assessment saved: {job.assessment_filepath.name}")
 
         job.set_stage(ProcessingStage.FILES_WRITTEN)
         job.add_timing('write_files', time.time() - stage_start)
@@ -298,18 +299,18 @@ def process_obsidian_links(
         Same job object (unchanged)
     """
     if not job.has_files_written():
-        print(f"  [Job {job.video_id}] Files not written yet, skipping link processing")
+        logger.warning(f"  [Job {job.video_id}] Files not written yet, skipping link processing")
         return job
 
     try:
-        print(f"  [Job {job.video_id}] Adding cross-references...")
+        logger.info(f"  [Job {job.video_id}] Adding cross-references...")
         obsidian_linker.process_file(job.notes_filepath)
-        print(f"    ✓ Links processed")
+        logger.success(f"    ✓ Links processed")
         return job
 
     except Exception as e:
         # Link processing failure is not critical
-        print(f"    ✗ Link processing failed: {e}")
+        logger.error(f"    ✗ Link processing failed: {e}")
         return job
 
 
@@ -335,12 +336,12 @@ def export_pdfs(
         Same job object with PDF paths populated
     """
     if not pdf_exporter:
-        print(f"  [Job {job.video_id}] PDF export disabled, skipping")
+        logger.warning(f"  [Job {job.video_id}] PDF export disabled, skipping")
         return job
 
     # Check if already done
     if job.has_pdfs_exported():
-        print(f"  [Job {job.video_id}] PDFs already exported, skipping")
+        logger.warning(f"  [Job {job.video_id}] PDFs already exported, skipping")
         return job
 
     if not job.has_files_written():
@@ -363,18 +364,18 @@ def export_pdfs(
                 job.notes_filepath,
                 job.notes_pdf_path
             )
-            print(f"  [Job {job.video_id}] ✓ Notes PDF: {job.notes_pdf_path.name}")
+            logger.success(f"  [Job {job.video_id}] ✓ Notes PDF: {job.notes_pdf_path.name}")
 
-        # Export assessment PDF
-        if job.assessment_filepath and job.assessment_filepath.exists():
-            pdf_filename = job.assessment_filepath.stem + ".pdf"
-            job.assessment_pdf_path = job.pdf_subdir / pdf_filename
-
-            pdf_exporter.markdown_to_pdf(
-                job.assessment_filepath,
-                job.assessment_pdf_path
-            )
-            print(f"  [Job {job.video_id}] ✓ Assessment PDF: {job.assessment_pdf_path.name}")
+        # Assessment PDFs disabled - only export notes
+        # if job.assessment_filepath and job.assessment_filepath.exists():
+        #     pdf_filename = job.assessment_filepath.stem + ".pdf"
+        #     job.assessment_pdf_path = job.pdf_subdir / pdf_filename
+        #
+        #     pdf_exporter.markdown_to_pdf(
+        #         job.assessment_filepath,
+        #         job.assessment_pdf_path
+        #     )
+        #     logger.success(f"  [Job {job.video_id}] ✓ Assessment PDF: {job.assessment_pdf_path.name}")
 
         job.set_stage(ProcessingStage.COMPLETED)
         job.add_timing('export_pdfs', time.time() - stage_start)
@@ -383,7 +384,7 @@ def export_pdfs(
 
     except Exception as e:
         # PDF export failure is not critical
-        print(f"  [Job {job.video_id}] ✗ PDF export failed: {e}")
+        logger.error(f"  [Job {job.video_id}] ✗ PDF export failed: {e}")
         return job
 
 
@@ -419,9 +420,9 @@ def process_video_job(
     job.start_time = start_time
 
     try:
-        print(f"\n{'='*60}")
-        print(f"Processing Job: {job.video_id}")
-        print(f"{'='*60}")
+        logger.info(f"\n{'='*60}")
+        logger.debug(f"Processing Job: {job.video_id}")
+        logger.info(f"{'='*60}")
 
         # Stage 1: Fetch
         job = fetch_transcript_and_title(
@@ -450,8 +451,8 @@ def process_video_job(
         job.processing_duration = job.end_time - start_time
         job.mark_completed(job.processing_duration)
 
-        print(f"  ✓ Job completed in {job.processing_duration:.1f}s")
-        print(f"{'='*60}\n")
+        logger.success(f"  ✓ Job completed in {job.processing_duration:.1f}s")
+        logger.info(f"{'='*60}\n")
 
         # Log job if logger provided
         if components.get('job_logger'):
@@ -464,8 +465,8 @@ def process_video_job(
         job.processing_duration = job.end_time - start_time
         job.mark_failed(str(e))
 
-        print(f"  ✗ Job failed: {e}")
-        print(f"{'='*60}\n")
+        logger.error(f"  ✗ Job failed: {e}")
+        logger.info(f"{'='*60}\n")
 
         # Log failed job if logger provided
         if components.get('job_logger'):

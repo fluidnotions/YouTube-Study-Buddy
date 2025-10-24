@@ -2,14 +2,14 @@
 Debug logging system for analyzing API responses and title fetching issues.
 """
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
+from loguru import logger
 
 
 class DebugLogger:
-    """File-based logger for debugging title fetching and API responses."""
+    """File-based logger for debugging title fetching and API responses using loguru."""
 
     def __init__(self, log_dir: str = "debug_logs", enabled: bool = True):
         """
@@ -21,6 +21,7 @@ class DebugLogger:
         """
         self.enabled = enabled
         self.log_dir = Path(log_dir)
+        self._handler_id = None
 
         if self.enabled:
             self.log_dir.mkdir(exist_ok=True)
@@ -30,31 +31,49 @@ class DebugLogger:
             self.session_log = self.log_dir / f"session_{timestamp}.log"
             self.api_log = self.log_dir / f"api_responses_{timestamp}.jsonl"
 
-            # Setup Python logging
-            self.logger = logging.getLogger('yt_study_buddy_debug')
-            self.logger.setLevel(logging.DEBUG)
-
-            # File handler
-            fh = logging.FileHandler(self.session_log)
-            fh.setLevel(logging.DEBUG)
-
-            # Console handler (optional)
-            ch = logging.StreamHandler()
-            ch.setLevel(logging.WARNING)
-
-            # Formatter
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            # Add loguru file handler for this debug session
+            self._handler_id = logger.add(
+                self.session_log,
+                format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+                level="DEBUG",
+                enqueue=True
             )
-            fh.setFormatter(formatter)
-            ch.setFormatter(formatter)
 
-            self.logger.addHandler(fh)
-            self.logger.addHandler(ch)
+            logger.info(f"Debug logging session started: {timestamp}")
+            logger.info(f"Session log: {self.session_log}")
+            logger.info(f"API log: {self.api_log}")
 
-            self.logger.info(f"Debug logging session started: {timestamp}")
-            self.logger.info(f"Session log: {self.session_log}")
-            self.logger.info(f"API log: {self.api_log}")
+    # Facade methods to delegate to loguru logger
+    def info(self, message: str):
+        """Log info message."""
+        if self.enabled:
+            logger.info(message)
+
+    def debug(self, message: str):
+        """Log debug message."""
+        if self.enabled:
+            logger.debug(message)
+
+    def warning(self, message: str):
+        """Log warning message."""
+        if self.enabled:
+            logger.warning(message)
+
+    def error(self, message: str):
+        """Log error message."""
+        if self.enabled:
+            logger.error(message)
+
+    def success(self, message: str):
+        """Log success message."""
+        if self.enabled:
+            logger.success(message)
+
+    def cleanup(self):
+        """Remove the debug file handler."""
+        if self._handler_id is not None:
+            logger.remove(self._handler_id)
+            self._handler_id = None
 
     def log_title_fetch_attempt(
         self,
@@ -68,7 +87,7 @@ class DebugLogger:
             return
 
         worker_label = f"Worker-{worker_id}" if worker_id is not None else "Main"
-        self.logger.info(
+        self.info(
             f"[{worker_label}] Fetching title for {video_id} "
             f"(attempt {attempt}/{max_retries})"
         )
@@ -120,12 +139,12 @@ class DebugLogger:
         # Also log to main logger
         if log_entry['success']:
             title = response_data.get('title', 'NO_TITLE') if response_data else 'NO_DATA'
-            self.logger.info(
+            self.info(
                 f"[{worker_label}] ✓ Title fetched for {video_id}: '{title}' "
                 f"(attempt {attempt}, status {status_code})"
             )
         else:
-            self.logger.warning(
+            self.warning(
                 f"[{worker_label}] ✗ Title fetch failed for {video_id}: "
                 f"status={status_code}, error={error} (attempt {attempt})"
             )
@@ -154,12 +173,12 @@ class DebugLogger:
         worker_label = f"Worker-{worker_id}" if worker_id is not None else "Main"
 
         if success:
-            self.logger.info(
+            self.info(
                 f"[{worker_label}] FINAL: {video_id} → '{title}' "
                 f"(succeeded after {total_attempts} attempt(s))"
             )
         else:
-            self.logger.error(
+            self.error(
                 f"[{worker_label}] FINAL: {video_id} → FAILED "
                 f"(all {total_attempts} attempts failed, using fallback)"
             )
@@ -176,7 +195,7 @@ class DebugLogger:
 
         worker_label = f"Worker-{worker_id}" if worker_id is not None else "Main"
         status = "SUCCESS" if success else "FAILED"
-        self.logger.debug(
+        self.debug(
             f"[{worker_label}] Tor circuit rotation for connection #{connection_id}: {status}"
         )
 
@@ -193,7 +212,7 @@ class DebugLogger:
 
         worker_label = f"Worker-{worker_id}" if worker_id is not None else "Main"
         uniqueness = "UNIQUE" if unique else "COLLISION"
-        self.logger.debug(
+        self.debug(
             f"[{worker_label}] Connection #{connection_id} exit IP: {exit_ip} ({uniqueness})"
         )
 
@@ -204,12 +223,12 @@ class DebugLogger:
         Returns summary of successes/failures by video, worker, attempt.
         """
         if not self.enabled or not self.api_log.exists():
-            print("No API logs to analyze")
+            logger.info("No API logs to analyze")
             return
 
-        print(f"\n{'='*60}")
-        print("API RESPONSE ANALYSIS")
-        print(f"{'='*60}\n")
+        logger.info(f"\n{'='*60}")
+        logger.info("API RESPONSE ANALYSIS")
+        logger.info(f"{'='*60}\n")
 
         responses = []
         with open(self.api_log, 'r', encoding='utf-8') as f:
@@ -217,7 +236,7 @@ class DebugLogger:
                 responses.append(json.loads(line))
 
         if not responses:
-            print("No responses logged yet")
+            logger.info("No responses logged yet")
             return
 
         # Overall stats
@@ -225,13 +244,13 @@ class DebugLogger:
         successes = sum(1 for r in responses if r['success'])
         failures = total - successes
 
-        print(f"Total API calls: {total}")
-        print(f"Successes: {successes} ({successes/total*100:.1f}%)")
-        print(f"Failures: {failures} ({failures/total*100:.1f}%)")
-        print()
+        logger.info(f"Total API calls: {total}")
+        logger.success(f"Successes: {successes} ({successes/total*100:.1f}%)")
+        logger.error(f"Failures: {failures} ({failures/total*100:.1f}%)")
+    
 
         # By video
-        print("By Video:")
+        logger.info("By Video:")
         videos = {}
         for r in responses:
             vid = r['video_id']
@@ -245,13 +264,13 @@ class DebugLogger:
 
         for vid, stats in videos.items():
             total_attempts = stats['success'] + stats['failure']
-            print(f"  {vid}: {stats['success']}/{total_attempts} successful")
+            logger.success(f"  {vid}: {stats['success']}/{total_attempts} successful")
             if stats['failure'] > 0:
-                print(f"    → Failed attempts: {stats['failure']}")
-        print()
+                logger.error(f"    → Failed attempts: {stats['failure']}")
+    
 
         # By worker
-        print("By Worker:")
+        logger.debug("By Worker:")
         workers = {}
         for r in responses:
             worker = r['worker']
@@ -265,11 +284,11 @@ class DebugLogger:
         for worker, stats in workers.items():
             total_attempts = stats['success'] + stats['failure']
             success_rate = stats['success'] / total_attempts * 100
-            print(f"  {worker}: {stats['success']}/{total_attempts} ({success_rate:.1f}% success)")
-        print()
+            logger.success(f"  {worker}: {stats['success']}/{total_attempts} ({success_rate:.1f}% success)")
+    
 
         # By attempt number
-        print("By Attempt Number:")
+        logger.debug("By Attempt Number:")
         attempts = {}
         for r in responses:
             att = r['attempt']
@@ -284,23 +303,23 @@ class DebugLogger:
             stats = attempts[att]
             total_attempts = stats['success'] + stats['failure']
             success_rate = stats['success'] / total_attempts * 100
-            print(f"  Attempt {att}: {stats['success']}/{total_attempts} ({success_rate:.1f}% success)")
-        print()
+            logger.success(f"  Attempt {att}: {stats['success']}/{total_attempts} ({success_rate:.1f}% success)")
+    
 
         # Failed responses details
         failed = [r for r in responses if not r['success']]
         if failed:
-            print(f"Failed Responses Details ({len(failed)} total):")
+            logger.error(f"Failed Responses Details ({len(failed)} total):")
             for r in failed[:10]:  # Show first 10
-                print(f"  {r['video_id']} (attempt {r['attempt']}, worker {r['worker']})")
-                print(f"    Status: {r['status_code']}, Error: {r['error']}")
+                logger.debug(f"  {r['video_id']} (attempt {r['attempt']}, worker {r['worker']})")
+                logger.error(f"    Status: {r['status_code']}, Error: {r['error']}")
             if len(failed) > 10:
-                print(f"  ... and {len(failed) - 10} more")
-        print()
+                logger.error(f"  ... and {len(failed) - 10} more")
+    
 
-        print(f"Full logs: {self.session_log}")
-        print(f"API data: {self.api_log}")
-        print(f"{'='*60}\n")
+        logger.info(f"Full logs: {self.session_log}")
+        logger.info(f"API data: {self.api_log}")
+        logger.info(f"{'='*60}\n")
 
 
 # Global logger instance
@@ -323,7 +342,8 @@ def enable_debug_logging():
 
 
 def disable_debug_logging():
-    """Disable debug logging."""
+    """Disable debug logging and cleanup handlers."""
     global _global_logger
     if _global_logger:
+        _global_logger.cleanup()
         _global_logger.enabled = False

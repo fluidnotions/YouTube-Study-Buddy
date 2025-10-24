@@ -10,10 +10,10 @@ Usage:
 import argparse
 import os
 import sys
-import time
 import threading
 
 from pathlib import Path
+from loguru import logger
 
 from .assessment_generator import AssessmentGenerator
 from .auto_categorizer import AutoCategorizer
@@ -55,6 +55,19 @@ class YouTubeStudyNotes:
         self.notes_generator = StudyNotesGenerator()
         self.obsidian_linker = ObsidianLinker(base_dir, subject, global_context)
 
+        # Initialize Tor coordinator for parallel processing
+        # Uses SingleTorCoordinator since we have only ONE Tor daemon
+        if parallel:
+            from .tor_transcript_fetcher import SingleTorCoordinator
+            self.tor_coordinator = SingleTorCoordinator(
+                tor_host='127.0.0.1',
+                tor_port=9050,
+                tor_control_port=9051,
+                cooldown_hours=1.0
+            )
+        else:
+            self.tor_coordinator = None
+
         # Initialize new components
         self.auto_categorizer = AutoCategorizer() if self.auto_categorize else None
         self.assessment_generator = AssessmentGenerator(self.notes_generator.client) if generate_assessments else None
@@ -62,9 +75,9 @@ class YouTubeStudyNotes:
         # Initialize PDF exporter if requested
         if self.export_pdf:
             if not PDF_AVAILABLE:
-                print("Warning: PDF export requires additional dependencies:")
-                print("  uv pip install weasyprint markdown2")
-                print("Continuing without PDF export...")
+                logger.warning("Warning: PDF export requires additional dependencies:")
+                logger.info("  uv pip install weasyprint markdown2")
+                logger.info("Continuing without PDF export...")
                 self.export_pdf = False
                 self.pdf_exporter = None
             else:
@@ -79,13 +92,16 @@ class YouTubeStudyNotes:
         # Job logger for tracking all processing results
         self.job_logger = create_default_logger(Path(self.base_dir))
 
-        # Add parallel processor
-        if self.parallel:
-            self.parallel_processor = ParallelVideoProcessor(
-                max_workers=max_workers,
-                rate_limit_delay=1.0
-            )
-            self.metrics = ProcessingMetrics()
+        # Unified processor: Always create ParallelVideoProcessor
+        # When parallel=False, max_workers=1 provides sequential behavior
+        self.parallel_processor = ParallelVideoProcessor(
+            max_workers=max_workers if parallel else 1,
+            rate_limit_delay=1.0,
+            sequential_delay=3.0
+        )
+
+        # Always create metrics for consistent tracking
+        self.metrics = ProcessingMetrics()
 
     def read_urls_from_file(self, filename='urls.txt'):
         """Read URLs from a text file, ignoring comments and empty lines."""
@@ -101,11 +117,11 @@ class YouTubeStudyNotes:
                     if line and not line.startswith('#'):
                         urls.append(line)
         except Exception as e:
-            print(f"Warning: Could not read {filename}: {e}")
+            logger.error(f"Warning: Could not read {filename}: {e}")
 
         return urls
 
-    def process_single_url(self, url, worker_processor=None, worker_id=None):
+    def process_single_url(self, url, worker_processor=None, worker_id=None, tor_fetcher=None):
         """
         Process a single YouTube URL using stateless pipeline.
 
@@ -114,6 +130,7 @@ class YouTubeStudyNotes:
             worker_processor: Optional VideoProcessor instance for this worker.
                             If None, uses self.video_processor (shared instance).
             worker_id: Optional worker ID for logging/debugging
+            tor_fetcher: Optional TorTranscriptFetcher from pool (for parallel mode)
 
         Returns:
             ProcessingResult with outcome
@@ -121,10 +138,15 @@ class YouTubeStudyNotes:
         # Use per-worker processor if provided, otherwise use shared instance
         processor = worker_processor if worker_processor else self.video_processor
 
+        # If tor_fetcher provided from pool, inject it into the processor
+        if tor_fetcher and hasattr(processor, 'provider'):
+            if hasattr(processor.provider, 'tor_fetcher'):
+                processor.provider.tor_fetcher = tor_fetcher
+
         # Extract video ID
         video_id = processor.get_video_id(url)
         if not video_id:
-            print(f"ERROR: Invalid YouTube URL: {url}")
+            logger.error(f"ERROR: Invalid YouTube URL: {url}")
             return ProcessingResult(
                 url=url,
                 video_id="invalid",
@@ -136,18 +158,22 @@ class YouTubeStudyNotes:
         current_subject = self.subject
         current_output_dir = self.output_dir
 
-        # If auto-categorizing, we need to fetch transcript and title first
+        # Pre-fetch transcript and title if auto-categorization is enabled
+        # This avoids double-fetching (once for categorization, once in pipeline)
+        pre_fetched_transcript = None
+        pre_fetched_title = None
+
         if self.auto_categorizer and not self.subject:
             try:
-                print("Fetching transcript for auto-categorization...")
-                transcript_data = processor.get_transcript(video_id)
-                video_title = processor.get_video_title(video_id, worker_id=worker_id)
+                logger.info("Fetching transcript for auto-categorization...")
+                pre_fetched_transcript = processor.get_transcript(video_id)
+                pre_fetched_title = processor.get_video_title(video_id, worker_id=worker_id)
 
-                print("Auto-categorizing video content...")
+                logger.info("Auto-categorizing video content...")
                 detected_subject = self.auto_categorizer.categorize_video(
-                    transcript_data['transcript'], video_title, self.base_dir
+                    pre_fetched_transcript['transcript'], pre_fetched_title, self.base_dir
                 )
-                print(f"Detected subject: {detected_subject}")
+                logger.info(f"Detected subject: {detected_subject}")
 
                 current_subject = detected_subject
                 current_output_dir = os.path.join(self.base_dir, detected_subject)
@@ -158,17 +184,30 @@ class YouTubeStudyNotes:
                     self.obsidian_linker = ObsidianLinker(self.base_dir, detected_subject, self.global_context)
 
             except Exception as e:
-                print(f"Auto-categorization failed: {e}, using base directory")
+                logger.error(f"Auto-categorization failed: {e}, using base directory")
                 current_subject = None
                 current_output_dir = self.base_dir
+                # Clear pre-fetched data on categorization failure
+                pre_fetched_transcript = None
+                pre_fetched_title = None
 
-        print(f"\nFound video ID: {video_id}")
+        logger.info(f"\nFound video ID: {video_id}")
         if current_subject:
-            print(f"Subject: {current_subject}")
-            print(f"Cross-reference scope: {'Global' if self.global_context else 'Subject-only'}")
+            logger.info(f"Subject: {current_subject}")
+            logger.info(f"Cross-reference scope: {'Global' if self.global_context else 'Subject-only'}")
 
         # Create job object
         job = create_job_from_url(url, video_id, subject=current_subject, worker_id=worker_id)
+
+        # If we pre-fetched for auto-categorization, populate job with that data
+        # This skips the fetch stage in the pipeline (avoiding double-fetch)
+        if pre_fetched_transcript and pre_fetched_title:
+            from .video_job import ProcessingStage
+            job.transcript = pre_fetched_transcript['transcript']
+            job.transcript_data = pre_fetched_transcript
+            job.video_title = pre_fetched_title
+            job.set_stage(ProcessingStage.TRANSCRIPT_FETCHED)
+            logger.debug("Using pre-fetched transcript from auto-categorization (skip fetch stage)")
 
         # Build components dict for pipeline
         components = {
@@ -202,7 +241,7 @@ class YouTubeStudyNotes:
             )
 
         except Exception as e:
-            print(f"\nERROR processing {url}: {e}")
+            logger.error(f"\nERROR processing {url}: {e}")
 
             # Job was already logged by pipeline, just return failure
             return ProcessingResult(
@@ -216,35 +255,47 @@ class YouTubeStudyNotes:
     def _handle_rate_limit_error(self, e):
         """Handle rate limit errors with helpful message."""
         if "rate limit" in str(e).lower() or "429" in str(e) or "too many requests" in str(e).lower():
-            print("\n⚠ RATE LIMITING DETECTED!")
-            print("YouTube is temporarily blocking requests. Solutions:")
-            print("1. Wait 15-30 minutes before trying again")
-            print("2. Process fewer videos at once")
-            print("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
+            logger.warning("\n⚠ RATE LIMITING DETECTED!")
+            logger.info("YouTube is temporarily blocking requests. Solutions:")
+            logger.info("1. Wait 15-30 minutes before trying again")
+            logger.info("2. Process fewer videos at once")
+            logger.info("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
         else:
-            print("\nTroubleshooting:")
-            print("1. Check if the video has captions/subtitles enabled")
-            print("2. Some videos restrict transcript access")
-            print("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
+            logger.info("\nTroubleshooting:")
+            logger.info("1. Check if the video has captions/subtitles enabled")
+            logger.info("2. Some videos restrict transcript access")
+            logger.info("3. Ensure Tor proxy is running: docker-compose up -d tor-proxy")
 
     def process_urls(self, urls):
         """Process a list of URLs (sequential or parallel)."""
         if not urls:
-            print("No URLs provided")
+            logger.info("No URLs provided")
             return
 
         # Check if API is ready
         if not self.notes_generator.is_ready():
             return
 
-        print(f"\nProcessing {len(urls)} URL(s)...")
+        logger.debug(f"\nProcessing {len(urls)} URL(s)...")
         if self.subject:
-            print(f"Subject: {self.subject}")
-            print(f"Cross-reference scope: {'Subject-only' if not self.global_context else 'Global'}")
+            logger.info(f"Subject: {self.subject}")
+            logger.info(f"Cross-reference scope: {'Subject-only' if not self.global_context else 'Global'}")
 
-        if self.parallel:
-            # Parallel processing with per-worker VideoProcessor instances
-            # Factory function creates independent VideoProcessor for each worker
+        # UNIFIED PROCESSING PATH: Single code path for both sequential and parallel modes
+        if self.parallel and self.tor_coordinator:
+            # Parallel mode with Tor coordinator - synchronized access to single Tor daemon
+            def process_with_coordinator_worker(url, worker_id):
+                """Process URL using Tor fetcher from coordinator."""
+                with self.tor_coordinator.acquire(worker_id=worker_id) as tor_fetcher:
+                    return self.process_single_url(url, worker_id=worker_id, tor_fetcher=tor_fetcher)
+
+            results = self.parallel_processor.process_videos_parallel(
+                urls,
+                process_with_coordinator_worker,
+                worker_factory=None  # Don't create per-worker processors
+            )
+        else:
+            # Sequential mode or parallel without pool - use worker factory
             def video_processor_factory():
                 """Create a new VideoProcessor instance for a worker thread."""
                 return VideoProcessor("tor")
@@ -255,45 +306,24 @@ class YouTubeStudyNotes:
                 worker_factory=video_processor_factory
             )
 
-            # Collect metrics
-            for result in results:
-                if hasattr(self, 'metrics'):
-                    self.metrics.add_result(result)
+        # Collect metrics
+        for result in results:
+            self.metrics.add_result(result)
 
-            # Show statistics
-            if hasattr(self, 'metrics'):
-                self.metrics.print_summary()
+        # Show statistics
+        self.metrics.print_summary()
 
-            successful = sum(1 for r in results if r.success)
-            print(f"\n{'='*50}")
-            print(f"COMPLETE: {successful}/{len(urls)} URL(s) processed successfully")
-            print(f"Output saved to: {self.output_dir}/")
-
-        else:
-            # Sequential processing (existing logic)
-            successful = 0
-            for i, url in enumerate(urls, 1):
-                print(f"\n[{i}/{len(urls)}] Processing: {url}")
-
-                # Add delay between requests to avoid rate limiting
-                if i > 1:  # Skip delay for first video
-                    print("  Waiting 3 seconds to avoid rate limiting...")
-                    time.sleep(3)
-
-                result = self.process_single_url(url, worker_id=0)
-                if result.success:
-                    successful += 1
-
-            print(f"\n{'='*50}")
-            print(f"COMPLETE: {successful}/{len(urls)} URL(s) processed successfully")
-            print(f"Output saved to: {self.output_dir}/")
+        successful = sum(1 for r in results if r.success)
+        logger.info(f"\n{'='*50}")
+        logger.success(f"COMPLETE: {successful}/{len(urls)} URL(s) processed successfully")
+        logger.info(f"Output saved to: {self.output_dir}/")
 
         # Show knowledge graph stats
         stats = self.knowledge_graph.get_stats()
-        print(f"Knowledge Graph ({stats['scope']}): {stats['total_notes']} notes, {stats['total_concepts']} concepts")
+        logger.info(f"Knowledge Graph ({stats['scope']}): {stats['total_notes']} notes, {stats['total_concepts']} concepts")
         if stats.get('subject_count'):
-            print(f"Subjects: {stats['subject_count']} ({', '.join(stats['subjects'])})")
-        print("="*50)
+            logger.info(f"Subjects: {stats['subject_count']} ({', '.join(stats['subjects'])})")
+        logger.info("="*50)
 
         # Show statistics at the end
         if hasattr(self.video_processor.provider, 'print_stats'):
@@ -400,10 +430,10 @@ def main():
     if args.debug_logging:
         from .debug_logger import enable_debug_logging
         logger = enable_debug_logging()
-        print(f"✓ Debug logging enabled")
-        print(f"  Session log: {logger.session_log}")
-        print(f"  API log: {logger.api_log}")
-        print()
+        logger.success(f"✓ Debug logging enabled")
+        logger.info(f"  Session log: {logger.session_log}")
+        logger.info(f"  API log: {logger.api_log}")
+        
 
     # Create app instance with configuration
     app = YouTubeStudyNotes(
@@ -424,7 +454,7 @@ def main():
         # Read from file
         urls_to_process = app.read_urls_from_file(args.file)
         if not urls_to_process:
-            print(f"No URLs found in {args.file}")
+            logger.info(f"No URLs found in {args.file}")
             sys.exit(1)
     elif args.urls:
         # Use URLs from command line
@@ -439,10 +469,10 @@ def main():
 
     # Show debug log analysis if enabled
     if args.debug_logging:
-        print("\n" + "="*60)
+        logger.info("\n" + "="*60)
         from .debug_logger import get_logger
-        logger = get_logger()
-        logger.analyze_logs()
+        debug_logger = get_logger()
+        debug_logger.analyze_logs()
 
 
 if __name__ == "__main__":

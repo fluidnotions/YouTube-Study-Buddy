@@ -13,6 +13,7 @@ from typing import Protocol, Dict, Any, Optional
 import requests
 
 from .tor_transcript_fetcher import TorTranscriptFetcher
+from loguru import logger
 
 
 class TranscriptProvider(Protocol):
@@ -67,17 +68,15 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
     connections are blocked by YouTube's IP-based blocking.
     """
 
-    def __init__(self, tor_host: str = '127.0.0.1', tor_port: int = 9050, use_tor_first: bool = True):
+    def __init__(self, tor_host: str = '127.0.0.1', tor_port: int = 9050):
         """
         Initialize Tor-based transcript provider with yt-dlp fallback.
 
         Args:
             tor_host: Tor SOCKS proxy host (default: 127.0.0.1)
             tor_port: Tor SOCKS proxy port (default: 9050)
-            use_tor_first: Always True (Tor is primary, yt-dlp is fallback)
         """
         self.tor_fetcher = TorTranscriptFetcher(tor_host=tor_host, tor_port=tor_port)
-        self.use_tor_first = use_tor_first
         self._tor_verified = False
         self.stats = {
             'tor_success': 0,
@@ -95,12 +94,12 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             True if Tor is working, False otherwise
         """
         if not self._tor_verified:
-            print("Verifying Tor connection...")
+            logger.info("Verifying Tor connection...")
             self._tor_verified = self.tor_fetcher.check_tor_connection()
             if self._tor_verified:
-                print("✓ Tor connection verified")
+                logger.success("✓ Tor connection verified")
             else:
-                print("✗ Tor connection not available - cannot fetch transcripts (direct connection blocked by YouTube)")
+                logger.error("✗ Tor connection not available - cannot fetch transcripts (direct connection blocked by YouTube)")
         return self._tor_verified
 
     def get_transcript(self, video_id: str) -> Dict[str, Any]:
@@ -125,7 +124,6 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
             # Fetch transcript via Tor with yt-dlp fallback
             result = self.tor_fetcher.fetch_with_fallback(
                 video_id=video_id,
-                use_tor_first=self.use_tor_first,
                 languages=['en']
             )
 
@@ -144,7 +142,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
         except Exception as e:
             # Check if it's a rate limiting error and retry
             if "429" in str(e) or "Too Many Requests" in str(e):
-                print(f"  Rate limited, attempting retry with backoff...")
+                logger.warning(f"  Rate limited, attempting retry with backoff...")
                 return self._retry_with_backoff(video_id, max_retries=3)
             else:
                 raise Exception(f"Could not get transcript: {e}")
@@ -166,7 +164,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
                 return title
 
         except Exception as e:
-            print(f"Warning: Could not fetch video title via Tor: {e}")
+            logger.error(f"Warning: Could not fetch video title via Tor: {e}")
 
         return f"Video_{video_id}"
 
@@ -187,18 +185,17 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
         for attempt in range(max_retries):
             try:
                 wait_time = 5 * (2 ** attempt)
-                print(f"    Retry {attempt + 1}/{max_retries} - waiting {wait_time} seconds...")
+                logger.warning(f"    Retry {attempt + 1}/{max_retries} - waiting {wait_time} seconds...")
                 time.sleep(wait_time)
                 time.sleep(random.uniform(1, 3))
 
                 result = self.tor_fetcher.fetch_with_fallback(
                     video_id=video_id,
-                    use_tor_first=self.use_tor_first,
                     languages=['en']
                 )
 
                 if result:
-                    print(f"    ✓ Retry successful!")
+                    logger.warning(f"    ✓ Retry successful!")
                     return result
                 else:
                     raise Exception("Fetch returned None")
@@ -207,7 +204,7 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
                 if attempt == max_retries - 1:
                     raise Exception(f"All retry attempts failed. Last error: {retry_e}")
                 else:
-                    print(f"    Retry {attempt + 1} failed: {retry_e}")
+                    logger.error(f"    Retry {attempt + 1} failed: {retry_e}")
 
         raise Exception("All retry attempts exhausted")
 
@@ -215,17 +212,17 @@ class TorTranscriptProvider(AbstractTranscriptProvider):
         """Print success rate statistics."""
         total = self.stats['total_attempts']
         if total == 0:
-            print("No attempts yet")
+            logger.debug("No attempts yet")
             return
 
-        print("\n" + "="*50)
-        print("TRANSCRIPT FETCHING STATISTICS")
-        print("="*50)
-        print(f"Total attempts: {total}")
-        print(f"Tor successes: {self.stats['tor_success']} ({self.stats['tor_success']/total*100:.1f}%)")
-        print(f"YT-DLP successes: {self.stats['ytdlp_success']} ({self.stats['ytdlp_success']/total*100:.1f}%)")
-        print(f"Total failures: {self.stats['tor_failure']} ({self.stats['tor_failure']/total*100:.1f}%)")
-        print("="*50)
+        logger.info("\n" + "="*50)
+        logger.info("TRANSCRIPT FETCHING STATISTICS")
+        logger.info("="*50)
+        logger.debug(f"Total attempts: {total}")
+        logger.success(f"Tor successes: {self.stats['tor_success']} ({self.stats['tor_success']/total*100:.1f}%)")
+        logger.success(f"YT-DLP successes: {self.stats['ytdlp_success']} ({self.stats['ytdlp_success']/total*100:.1f}%)")
+        logger.error(f"Total failures: {self.stats['tor_failure']} ({self.stats['tor_failure']/total*100:.1f}%)")
+        logger.info("="*50)
 
 
 # Factory function for creating providers
@@ -239,7 +236,6 @@ def create_transcript_provider(provider_type: str = "tor", **kwargs) -> Transcri
         **kwargs: Additional arguments passed to provider constructor
             - tor_host: Tor proxy host (default: '127.0.0.1')
             - tor_port: Tor proxy port (default: 9050)
-            - use_tor_first: Kept for compatibility, always uses Tor
 
     Returns:
         TorTranscriptProvider instance
@@ -258,4 +254,4 @@ def process_with_provider(provider: TranscriptProvider, video_id: str) -> None:
     """
     transcript_data = provider.get_transcript(video_id)
     title = provider.get_video_title(video_id)
-    print(f"Processed '{title}': {transcript_data['length']} characters")
+    logger.info(f"Processed '{title}': {transcript_data['length']} characters")

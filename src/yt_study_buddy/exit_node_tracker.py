@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+from loguru import logger
 
 
 def humanize_timedelta(td: timedelta) -> str:
@@ -109,10 +110,10 @@ class ExitNodeTracker:
         # Load existing data
         self._data: Dict[str, Dict] = self._load()
 
-        print(f"📊 ExitNodeTracker initialized")
-        print(f"   Log file: {self.log_path}")
-        print(f"   Cooldown: {cooldown_hours} hour(s)")
-        print(f"   Tracked nodes: {len(self._data)}")
+        logger.info(f"📊 ExitNodeTracker initialized")
+        logger.info(f"   Log file: {self.log_path}")
+        logger.info(f"   Cooldown: {cooldown_hours} hour(s)")
+        logger.info(f"   Tracked nodes: {len(self._data)}")
 
     def _load(self) -> Dict[str, Dict]:
         """Load exit node data from JSON file."""
@@ -125,17 +126,17 @@ class ExitNodeTracker:
 
             # Validate structure
             if not isinstance(data, dict):
-                print(f"⚠️  Invalid log format, starting fresh")
+                logger.warning(f"⚠️  Invalid log format, starting fresh")
                 return {}
 
             return data
 
         except json.JSONDecodeError as e:
-            print(f"⚠️  Corrupted log file, starting fresh: {e}")
+            logger.warning(f"⚠️  Corrupted log file, starting fresh: {e}")
             return {}
 
         except Exception as e:
-            print(f"⚠️  Error loading log: {e}")
+            logger.error(f"⚠️  Error loading log: {e}")
             return {}
 
     def _save(self) -> None:
@@ -151,7 +152,7 @@ class ExitNodeTracker:
             temp_path.replace(self.log_path)
 
         except Exception as e:
-            print(f"⚠️  Error saving log: {e}")
+            logger.error(f"⚠️  Error saving log: {e}")
 
     def _cleanup_expired(self) -> int:
         """
@@ -382,7 +383,7 @@ class ExitNodeTracker:
         with self._lock:
             self._data.clear()
             self._save()
-            print("⚠️  Tracker reset - all data cleared")
+            logger.warning("⚠️  Tracker reset - all data cleared")
 
 
 # Global singleton instance (lazy initialized)

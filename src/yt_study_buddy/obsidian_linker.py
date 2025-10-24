@@ -5,6 +5,8 @@ Handles fuzzy matching and prevents nested linking issues.
 import os
 import re
 
+from loguru import logger
+
 try:
     from fuzzywuzzy import fuzz, process
 except ImportError:
@@ -67,7 +69,7 @@ class ObsidianLinker:
                         }
 
                 except Exception as e:
-                    print(f"Warning: Could not process {filename} for linking: {e}")
+                    logger.error(f"Warning: Could not process {filename} for linking: {e}")
                     continue
 
     def extract_existing_links(self, content):
@@ -79,7 +81,7 @@ class ObsidianLinker:
     def find_potential_links(self, content, exclude_current_title=None):
         """Find potential phrases in content that could be linked to existing notes."""
         if not fuzz or not process:
-            print("Warning: fuzzywuzzy not available for fuzzy matching. Install with: pip install fuzzywuzzy")
+            logger.warning("Warning: fuzzywuzzy not available for fuzzy matching. Install with: pip install fuzzywuzzy")
             return []
 
         # Get existing links to avoid double-linking
@@ -198,7 +200,7 @@ class ObsidianLinker:
         if not potential_links:
             return content
 
-        print(f"  Found {len(potential_links)} potential links to add")
+        logger.info(f"  Found {len(potential_links)} potential links to add")
 
         # Apply links in order of decreasing score to prioritize best matches
         modified_content = content
@@ -217,7 +219,7 @@ class ObsidianLinker:
             # Replace the first occurrence only to avoid over-linking
             if re.search(pattern, modified_content):
                 modified_content = re.sub(pattern, obsidian_link, modified_content, count=1)
-                print(f"    Linked: '{phrase}' -> [[{title}]]{subject_info}")
+                logger.info(f"    Linked: '{phrase}' -> [[{title}]]{subject_info}")
 
         return modified_content
 
@@ -241,7 +243,7 @@ class ObsidianLinker:
                 return True
 
         except Exception as e:
-            print(f"Error processing {file_path} for Obsidian links: {e}")
+            logger.error(f"Error processing {file_path} for Obsidian links: {e}")
 
         return False
 

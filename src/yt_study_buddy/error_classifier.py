@@ -5,6 +5,7 @@ Converts verbose error messages into concise, actionable summaries.
 """
 import re
 from typing import Optional
+from loguru import logger
 
 
 class ErrorClassifier:
@@ -224,15 +225,15 @@ If you are sure that the described cause is not responsible for this error and t
         "Video unavailable: This video is private",
     ]
 
-    print("Error Classification Tests")
-    print("=" * 60)
+    logger.error("Error Classification Tests")
+    logger.info("=" * 60)
 
     for i, error in enumerate(test_cases, 1):
-        print(f"\nTest {i}:")
-        print(f"Original ({len(error)} chars):")
-        print(f"  {error[:100]}...")
-        print(f"\nSimplified:")
-        print(f"  ✓ {simplify_error(error)}")
-        print(f"\nWith solution:")
-        print(f"  ✓ {get_error_with_solution(error)}")
-        print("-" * 60)
+        logger.info(f"\nTest {i}:")
+        logger.error(f"Original ({len(error)} chars):")
+        logger.error(f"  {error[:100]}...")
+        logger.info(f"\nSimplified:")
+        logger.error(f"  ✓ {simplify_error(error)}")
+        logger.info(f"\nWith solution:")
+        logger.error(f"  ✓ {get_error_with_solution(error)}")
+        logger.info("-" * 60)

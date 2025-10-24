@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Optional, List
 
+from loguru import logger
+
 try:
     import markdown2
     from weasyprint import HTML, CSS
@@ -373,7 +375,7 @@ class PDFExporter:
 
         html.write_pdf(output_file, stylesheets=[css])
 
-        print(f"✓ PDF generated: {output_file}")
+        logger.success(f"✓ PDF generated: {output_file}")
 
         # Open PDF if requested
         if open_after:
@@ -420,7 +422,7 @@ class PDFExporter:
             markdown_files = list(directory.glob(pattern))
 
         if not markdown_files:
-            print(f"No markdown files found matching '{pattern}'")
+            logger.info(f"No markdown files found matching '{pattern}'")
             return []
 
         # Determine output directory
@@ -430,7 +432,7 @@ class PDFExporter:
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"Exporting {len(markdown_files)} file(s) to PDF...")
+        logger.info(f"Exporting {len(markdown_files)} file(s) to PDF...")
 
         generated_pdfs = []
         for md_file in markdown_files:
@@ -447,9 +449,9 @@ class PDFExporter:
                 generated_pdfs.append(pdf_path)
 
             except Exception as e:
-                print(f"  ✗ Failed to export {md_file.name}: {e}")
+                logger.error(f"  ✗ Failed to export {md_file.name}: {e}")
 
-        print(f"✓ Successfully exported {len(generated_pdfs)}/{len(markdown_files)} file(s)")
+        logger.success(f"✓ Successfully exported {len(generated_pdfs)}/{len(markdown_files)} file(s)")
         return generated_pdfs
 
 
@@ -483,7 +485,7 @@ def main():
         output_dir = Path(args.output) if args.output else None
         exporter.batch_export(input_path, output_dir=output_dir, recursive=args.recursive)
     else:
-        print(f"Error: {input_path} is not a file or directory")
+        logger.error(f"Error: {input_path} is not a file or directory")
         exit(1)
 
 

@@ -13,14 +13,116 @@ from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
 
 import requests
+from loguru import logger
 from stem import Signal, SocketError
 from stem.control import Controller
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 from .ytdlp_fallback import YtDlpFallback
 from .debug_logger import get_logger
 from .exit_node_tracker import get_tracker
+from .daily_exit_tracker import get_daily_tracker
 from .error_classifier import simplify_error
+
+
+class SingleTorCoordinator:
+    """
+    Coordinates access to a single Tor daemon across multiple workers.
+
+    Unlike TorExitNodePool which requires multiple Tor daemons (one per worker),
+    this coordinator synchronizes access to a SINGLE Tor instance, ensuring:
+    1. Only one worker rotates circuits at a time (no race conditions)
+    2. Workers wait for circuit rotation to complete before proceeding
+    3. Unique exit IPs are tracked to avoid YouTube blocking
+
+    This is the appropriate choice when you have only ONE Tor daemon running.
+    """
+
+    def __init__(
+        self,
+        tor_host: str = '127.0.0.1',
+        tor_port: int = 9050,
+        tor_control_port: int = 9051,
+        tor_control_password: Optional[str] = None,
+        cooldown_hours: float = 1.0
+    ):
+        """
+        Initialize coordinator for single Tor instance.
+
+        Args:
+            tor_host: Tor SOCKS proxy host
+            tor_port: Tor SOCKS port
+            tor_control_port: Tor control port
+            tor_control_password: Control port password
+            cooldown_hours: Hours to track used IPs
+        """
+        self.tor_host = tor_host
+        self.tor_port = tor_port
+        self.tor_control_port = tor_control_port
+        self.tor_control_password = tor_control_password
+
+        # Single lock for all Tor operations (rotation, fetching, etc.)
+        self._tor_lock = threading.Lock()
+
+        # Track the currently active exit IP
+        self._current_exit_ip: Optional[str] = None
+        self._exit_ip_lock = threading.Lock()
+
+        # Get persistent tracker for cooldown enforcement
+        self._tracker = get_tracker(cooldown_hours=cooldown_hours)
+
+        logger.info(f"Initialized SingleTorCoordinator")
+        logger.info(f"  Single Tor daemon: {tor_host}:{tor_port}")
+        logger.info(f"  Control port: {tor_control_port}")
+
+        tracker_stats = self._tracker.get_stats()
+        logger.info(f"  Exit node tracker: {tracker_stats['in_cooldown']} IPs in cooldown, "
+                    f"{tracker_stats['available']} available")
+
+    @contextmanager
+    def acquire(self, worker_id: Optional[int] = None):
+        """
+        Acquire shared access to the Tor connection (context manager).
+
+        The Tor connection itself is shared, but this ensures proper synchronization
+        for circuit rotation and IP tracking.
+
+        Args:
+            worker_id: Optional worker ID for logging
+
+        Yields:
+            TorTranscriptFetcher instance configured with shared Tor settings
+        """
+        worker_label = f"worker-{worker_id}" if worker_id is not None else "unknown"
+
+        logger.info(f"  {worker_label} acquiring Tor connection (shared mode)")
+
+        # Create fetcher instance for this worker
+        fetcher = TorTranscriptFetcher(
+            tor_host=self.tor_host,
+            tor_port=self.tor_port,
+            tor_control_port=self.tor_control_port,
+            tor_control_password=self.tor_control_password
+        )
+
+        # Inject the shared lock into the fetcher
+        # This ensures that when the fetcher rotates circuits, it holds the global lock
+        fetcher._coordination_lock = self._tor_lock
+
+        try:
+            yield fetcher
+        finally:
+            logger.debug(f"  {worker_label} released Tor connection (shared mode)")
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about Tor usage."""
+        tracker_stats = self._tracker.get_stats()
+        return {
+            'mode': 'single_tor',
+            'current_exit_ip': self._current_exit_ip,
+            'tracker': tracker_stats
+        }
 
 
 class TorExitNodePool:
@@ -129,15 +231,15 @@ class TorExitNodePool:
         # Get persistent tracker for 1-hour cooldown enforcement
         self._tracker = get_tracker(cooldown_hours=cooldown_hours)
 
-        print(f"Initialized TorExitNodePool with {pool_size} connections")
-        print(f"SOCKS ports: {base_socks_port}-{base_socks_port + pool_size - 1}")
-        print(f"Control ports: {base_control_port}-{base_control_port + pool_size - 1}")
-        print(f"Unique exit enforcement: {'ENABLED' if enforce_unique_exits else 'DISABLED'}")
+        logger.info(f"Initialized TorExitNodePool with {pool_size} connections")
+        logger.info(f"SOCKS ports: {base_socks_port}-{base_socks_port + pool_size - 1}")
+        logger.info(f"Control ports: {base_control_port}-{base_control_port + pool_size - 1}")
+        logger.info(f"Unique exit enforcement: {'ENABLED' if enforce_unique_exits else 'DISABLED'}")
 
         # Show persistent tracker stats
         tracker_stats = self._tracker.get_stats()
-        print(f"Exit node tracker: {tracker_stats['in_cooldown']} IPs in cooldown, "
-              f"{tracker_stats['available']} available")
+        logger.info(f"Exit node tracker: {tracker_stats['in_cooldown']} IPs in cooldown, "
+                    f"{tracker_stats['available']} available")
 
     def _get_exit_ip(self, fetcher: 'TorTranscriptFetcher', connection_id: int) -> Optional[str]:
         """
@@ -157,10 +259,10 @@ class TorExitNodePool:
                 timeout=10
             )
             exit_ip = response.text.strip()
-            print(f"  Connection #{connection_id} exit IP: {exit_ip}")
+            logger.debug(f"  Connection #{connection_id} exit IP: {exit_ip}")
             return exit_ip
         except Exception as e:
-            print(f"  Warning: Could not get exit IP for connection #{connection_id}: {e}")
+            logger.error(f"  Warning: Could not get exit IP for connection #{connection_id}: {e}")
             return None
 
     def _ensure_unique_exit(
@@ -193,7 +295,7 @@ class TorExitNodePool:
             exit_ip = self._get_exit_ip(fetcher, connection_id)
 
             if exit_ip is None:
-                print(f"  {worker_label}: Could not verify exit IP (attempt {attempt + 1})")
+                logger.error(f"  {worker_label}: Could not verify exit IP (attempt {attempt + 1})")
                 if attempt == 0:
                     # Allow first attempt to proceed even if IP check fails
                     return True
@@ -209,8 +311,8 @@ class TorExitNodePool:
 
                 # Check if already in use by another active connection
                 if exit_ip in other_active_ips:
-                    print(f"  ⚠ {worker_label}: Exit IP {exit_ip} already in use by another active worker")
-                    print(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
+                    logger.warning(f"  ⚠ {worker_label}: Exit IP {exit_ip} already in use by another active worker")
+                    logger.info(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
                     fetcher.rotate_tor_circuit()
                     time.sleep(2)
                     continue
@@ -219,9 +321,9 @@ class TorExitNodePool:
                 if not self._tracker.is_available(exit_ip):
                     cooldown_remaining = self._tracker.get_cooldown_remaining(exit_ip)
                     minutes_remaining = int(cooldown_remaining / 60) if cooldown_remaining else 0
-                    print(f"  ⚠ {worker_label}: Exit IP {exit_ip} in cooldown "
-                          f"({minutes_remaining}m remaining)")
-                    print(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
+                    logger.warning(f"  ⚠ {worker_label}: Exit IP {exit_ip} in cooldown "
+                                   f"({minutes_remaining}m remaining)")
+                    logger.info(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
                     fetcher.rotate_tor_circuit()
                     time.sleep(2)
                     continue
@@ -229,12 +331,12 @@ class TorExitNodePool:
                 # Unique IP found AND not in cooldown! Register it
                 self._active_exit_ips[connection_id] = exit_ip
                 self._tracker.record_use(exit_ip, worker_id=worker_id)
-                print(f"  ✓ {worker_label}: Unique exit IP secured: {exit_ip}")
+                logger.success(f"  ✓ {worker_label}: Unique exit IP secured: {exit_ip}")
                 return True
 
-        print(f"  ✗ {worker_label}: Could not obtain unique exit IP after "
-              f"{self.max_rotation_attempts} attempts")
-        print(f"  Proceeding with non-unique exit (may cause rate limiting)")
+        logger.error(f"  ✗ {worker_label}: Could not obtain unique exit IP after "
+                     f"{self.max_rotation_attempts} attempts")
+        logger.info(f"  Proceeding with non-unique exit (may cause rate limiting)")
         return False
 
     @contextmanager
@@ -277,8 +379,8 @@ class TorExitNodePool:
         control_port = self.base_control_port + connection_id
 
         worker_label = f"worker-{worker_id}" if worker_id is not None else "unknown"
-        print(f"✓ {worker_label} acquired Tor connection #{connection_id} "
-              f"(SOCKS: {socks_port}, Control: {control_port})")
+        logger.success(f"✓ {worker_label} acquired Tor connection #{connection_id} "
+                       f"(SOCKS: {socks_port}, Control: {control_port})")
 
         # Create fetcher instance for this connection
         fetcher = TorTranscriptFetcher(
@@ -303,7 +405,7 @@ class TorExitNodePool:
                 self._in_use.discard(connection_id)
                 self._available.append(connection_id)
 
-            print(f"✓ {worker_label} released Tor connection #{connection_id}")
+            logger.success(f"✓ {worker_label} released Tor connection #{connection_id}")
 
     def get_connection(self, worker_id: Optional[int] = None) -> 'TorTranscriptFetcher':
         """
@@ -329,7 +431,7 @@ class TorExitNodePool:
         control_port = self.base_control_port + connection_id
 
         worker_label = f"worker-{worker_id}" if worker_id is not None else "unknown"
-        print(f"✓ {worker_label} acquired Tor connection #{connection_id}")
+        logger.success(f"✓ {worker_label} acquired Tor connection #{connection_id}")
 
         fetcher = TorTranscriptFetcher(
             tor_host=self.tor_host,
@@ -364,7 +466,7 @@ class TorExitNodePool:
             self._in_use.discard(connection_id)
             self._available.append(connection_id)
 
-        print(f"✓ Released Tor connection #{connection_id}")
+        logger.success(f"✓ Released Tor connection #{connection_id}")
 
     def get_stats(self) -> Dict[str, Any]:
         """Get pool statistics including unique exit IPs and persistent tracker info."""
@@ -424,13 +526,45 @@ class TorTranscriptFetcher:
         # Track if control port is available (set to False after first failure)
         self._control_port_available = True
 
-    def rotate_tor_circuit(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
+        # Daily exit node tracker
+        self.daily_tracker = get_daily_tracker()
+
+    def _record_attempt(self, video_id: str, attempt: int, success: bool, exit_ip: Optional[str] = None):
+        """
+        Record an attempt in the daily tracker.
+
+        Args:
+            video_id: YouTube video ID
+            attempt: Attempt number (1-based)
+            success: Whether the attempt succeeded
+            exit_ip: Exit node IP (fetched if not provided)
+        """
+        if exit_ip is None:
+            try:
+                exit_ip = self.session.get(
+                    'https://api.ipify.org',
+                    proxies=self.proxies,
+                    timeout=5
+                ).text
+            except:
+                exit_ip = "unknown"
+
+        self.daily_tracker.record_attempt(
+            exit_ip=exit_ip,
+            video_id=video_id,
+            attempt=attempt,
+            success=success
+        )
+
+    def rotate_tor_circuit(self, max_retries: int = 3, retry_delay: float = 2.0, max_rotation_attempts: int = 5) -> bool:
         """
         Request a new Tor circuit (new exit node) with retry logic.
+        Avoids exit nodes that failed today.
 
         Args:
             max_retries: Maximum number of connection attempts (default: 3)
             retry_delay: Delay between retries in seconds (default: 2.0)
+            max_rotation_attempts: Max attempts to get a non-failed exit IP (default: 5)
 
         Returns:
             True if circuit was rotated successfully, False otherwise
@@ -439,45 +573,100 @@ class TorTranscriptFetcher:
         if not self._control_port_available:
             return False
 
-        for attempt in range(max_retries):
-            try:
-                with Controller.from_port(
-                    address=self.tor_host,
-                    port=self.tor_control_port
-                ) as controller:
-                    if self.tor_control_password:
-                        controller.authenticate(password=self.tor_control_password)
+        # If coordination lock exists (parallel mode), acquire it for rotation
+        # This prevents multiple workers from rotating the same Tor circuit simultaneously
+        coordination_lock = getattr(self, '_coordination_lock', None)
+
+        def _do_rotation():
+            """Inner function that performs the actual rotation."""
+            # Get list of IPs that failed today
+            failed_ips = set(self.daily_tracker.get_failed_ips_today())
+            if failed_ips:
+                logger.debug(f"Avoiding {len(failed_ips)} failed IPs from today")
+
+            for attempt in range(max_retries):
+                try:
+                    with Controller.from_port(
+                        address=self.tor_host,
+                        port=self.tor_control_port
+                    ) as controller:
+                        if self.tor_control_password:
+                            controller.authenticate(password=self.tor_control_password)
+                        else:
+                            controller.authenticate()
+
+                        # Try to get a non-failed exit node
+                        rotation_attempts = 0
+                        while rotation_attempts < max_rotation_attempts:
+                            controller.signal(Signal.NEWNYM)
+
+                            # CRITICAL: Close session to break persistent connections
+                            # requests.Session() maintains connection pool that reuses same circuit
+                            # Must create fresh connection to use new Tor circuit
+                            self.session.close()
+                            self.session = requests.Session()
+
+                            # Wait for new circuit to be ready
+                            # get_newnym_wait() is minimum, add buffer for circuit build time
+                            wait_time = max(controller.get_newnym_wait(), 3.0)
+                            time.sleep(wait_time)
+
+                            # Check the new exit IP
+                            try:
+                                new_exit_ip = self.session.get(
+                                    'https://api.ipify.org',
+                                    proxies=self.proxies,
+                                    timeout=5
+                                ).text
+
+                                # Check if this IP failed today
+                                if new_exit_ip in failed_ips:
+                                    rotation_attempts += 1
+                                    logger.warning(f"⚠️  Got previously failed IP {new_exit_ip}, rotating again ({rotation_attempts}/{max_rotation_attempts})...")
+                                    continue
+                                else:
+                                    logger.success(f"✓ Tor circuit rotated to new IP: {new_exit_ip}")
+                                    return True
+
+                            except Exception as ip_check_error:
+                                logger.warning(f"⚠️  Could not verify exit IP: {ip_check_error}")
+                                # Can't verify, but rotation succeeded
+                                logger.success("✓ Tor circuit rotated (IP verification failed)")
+                                return True
+
+                        # Exhausted rotation attempts
+                        logger.warning(f"⚠️  Could not find non-failed exit IP after {max_rotation_attempts} attempts")
+                        return False
+
+                except (ConnectionRefusedError, OSError, SocketError) as e:
+                    # Connection errors - Tor might not be running yet or temporarily down
+                    if attempt < max_retries - 1:
+                        logger.info(f"Tor control port not ready (attempt {attempt + 1}/{max_retries})")
+                        logger.warning(f"Retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
                     else:
-                        controller.authenticate()
+                        # Mark control port as unavailable to stop future attempts
+                        self._control_port_available = False
+                        logger.warning(f"⚠️  Tor control port unavailable after {max_retries} attempts")
+                        logger.info("Circuit rotation disabled - will use fixed exit nodes")
 
-                    controller.signal(Signal.NEWNYM)
-
-                    # Wait for circuit to establish
-                    time.sleep(controller.get_newnym_wait())
-
-                    print("✓ Tor circuit rotated")
-                    return True
-
-            except (ConnectionRefusedError, OSError, SocketError) as e:
-                # Connection errors - Tor might not be running yet or temporarily down
-                if attempt < max_retries - 1:
-                    print(f"Tor control port not ready (attempt {attempt + 1}/{max_retries})")
-                    print(f"Retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                else:
-                    # Mark control port as unavailable to stop future attempts
+                except Exception as e:
+                    # Authentication errors or other issues - don't retry
                     self._control_port_available = False
-                    print(f"⚠️  Tor control port unavailable after {max_retries} attempts")
-                    print("Circuit rotation disabled - will use fixed exit nodes")
+                    logger.error(f"⚠️  Tor circuit rotation failed: {type(e).__name__}")
+                    logger.info("Circuit rotation disabled - will use fixed exit nodes")
+                    return False
 
-            except Exception as e:
-                # Authentication errors or other issues - don't retry
-                self._control_port_available = False
-                print(f"⚠️  Tor circuit rotation failed: {type(e).__name__}")
-                print("Circuit rotation disabled - will use fixed exit nodes")
-                return False
+            return False
 
-        return False
+        # If we have a coordination lock (parallel mode), use it
+        if coordination_lock is not None:
+            with coordination_lock:
+                logger.debug("  Acquired coordination lock for Tor rotation")
+                return _do_rotation()
+        else:
+            # Sequential mode - no lock needed
+            return _do_rotation()
 
     def check_tor_connection(self) -> bool:
         """
@@ -497,12 +686,12 @@ class TorTranscriptFetcher:
                 timeout=10
             ).text
 
-            print(f"Normal IP: {normal_ip}")
-            print(f"Tor IP: {tor_ip}")
+            logger.info(f"Normal IP: {normal_ip}")
+            logger.info(f"Tor IP: {tor_ip}")
 
             return normal_ip != tor_ip
         except Exception as e:
-            print(f"Tor connection check failed: {e}")
+            logger.error(f"Tor connection check failed: {e}")
             return False
 
     def check_transcript_availability(
@@ -575,7 +764,7 @@ class TorTranscriptFetcher:
         if check_availability:
             is_available, error_msg = self.check_transcript_availability(video_id, languages)
             if not is_available:
-                print(f"⚠️  Transcript not available: {error_msg}")
+                logger.error(f"⚠️  Transcript not available: {error_msg}")
                 return None
 
         last_error = None
@@ -583,8 +772,8 @@ class TorTranscriptFetcher:
         for attempt in range(max_retries):
             try:
                 # Rotate circuit on retries (not on first attempt)
-                if attempt > 1:
-                    print(f"Retry attempt {attempt + 1}/{max_retries}...")
+                if attempt > 0:
+                    logger.warning(f"Retry attempt {attempt + 1}/{max_retries}...")
 
                     # Try to rotate circuit, but don't fail if control port unavailable
                     rotation_success = self.rotate_tor_circuit()
@@ -592,12 +781,12 @@ class TorTranscriptFetcher:
                     # If circuit rotation failed, add extra delay to let rate limits expire
                     if not rotation_success:
                         extra_delay = 10 * attempt  # 10s, 20s, 30s, 40s...
-                        print(f"Circuit rotation unavailable, adding {extra_delay}s delay...")
+                        logger.info(f"Circuit rotation unavailable, adding {extra_delay}s delay...")
                         time.sleep(extra_delay)
 
                     # Exponential backoff with jitter
                     backoff = (2 ** attempt) + random.uniform(0, 1)
-                    print(f"Waiting {backoff:.1f}s before retry...")
+                    logger.warning(f"Waiting {backoff:.1f}s before retry...")
                     time.sleep(backoff)
 
                 # Add random delay to appear more human-like
@@ -605,7 +794,7 @@ class TorTranscriptFetcher:
 
                 # Calculate adaptive timeout (increases with each retry)
                 timeout = min(base_timeout * (1.5 ** attempt), max_timeout)
-                print(f"Using timeout: {timeout:.0f}s")
+                logger.info(f"Using timeout: {timeout:.0f}s")
 
                 # Use youtube-transcript-api with proxies
                 # Note: youtube-transcript-api doesn't expose timeout directly,
@@ -614,11 +803,36 @@ class TorTranscriptFetcher:
                 socket.setdefaulttimeout(timeout)
 
                 try:
-                    # Instantiate API and fetch transcript
-                    api = YouTubeTranscriptApi()
+                    # Instantiate API with Tor proxy configuration
+                    proxy_config = GenericProxyConfig(
+                        http_url=self.proxies['http'],
+                        https_url=self.proxies['https']
+                    )
+                    api = YouTubeTranscriptApi(proxy_config=proxy_config)
                     fetched = api.fetch(video_id, languages=languages)
                     # Convert to list of snippets
                     transcript_list = list(fetched)
+                except Exception as fetch_error:
+                    attempt = attempt + 1
+                    # Show exit node being used when fetch fails
+                    try:
+                        exit_ip = self.session.get(
+                            'https://api.ipify.org',
+                            proxies=self.proxies,
+                            timeout=5
+                        ).text
+                        logger.error(f"✗ Fetch failed (attempt {attempt + 1}): {simplify_error(str(fetch_error))}")
+                        logger.debug(f"   Exit IP: {exit_ip}")
+
+                        # Record failure in daily tracker
+                        self._record_attempt(video_id, attempt + 1, success=False, exit_ip=exit_ip)
+                    except:
+                        logger.error(f"✗ Fetch failed (attempt {attempt + 1}): {simplify_error(str(fetch_error))}")
+                        logger.error(f"   Exit IP: Could not determine")
+
+                        # Record failure with unknown IP
+                        self._record_attempt(video_id, attempt + 1, success=False, exit_ip=None)
+                    raise  # Re-raise to be caught by outer exception handlers
                 finally:
                     socket.setdefaulttimeout(old_timeout)
 
@@ -629,7 +843,7 @@ class TorTranscriptFetcher:
                 # Clean up the transcript
                 transcript_text = re.sub(r'\s+', ' ', transcript_text)
                 transcript_text = transcript_text.replace('[Music]', '').replace('[Applause]', '')
-
+                logger.debug(f'transcript char len {len(transcript_text)}')
                 # Calculate video duration
                 duration_info = None
                 if transcript_list:
@@ -638,7 +852,26 @@ class TorTranscriptFetcher:
                     duration_minutes = int(duration_seconds / 60)
                     duration_info = f"~{duration_minutes} minutes"
 
-                print(f"✓ Successfully fetched transcript on attempt {attempt + 1}")
+                # Show exit node on success and record
+                try:
+                    exit_ip = self.session.get(
+                        'https://api.ipify.org',
+                        proxies=self.proxies,
+                        timeout=5
+                    ).text
+                    logger.success(f"✓ Successfully fetched transcript on attempt {attempt + 1} (Exit IP: {exit_ip})")
+
+                    # Record success in daily tracker
+                    self._record_attempt(video_id, attempt + 1, success=True, exit_ip=exit_ip)
+                except:
+                    logger.success(f"✓ Successfully fetched transcript on attempt {attempt + 1}")
+
+                    # Record success with unknown IP
+                    self._record_attempt(video_id, attempt + 1, success=True, exit_ip=None)
+
+                # Save tracker after successful fetch
+                self.daily_tracker.save()
+
                 return {
                     'transcript': transcript_text,
                     'duration': duration_info,
@@ -649,30 +882,30 @@ class TorTranscriptFetcher:
 
             except (requests.exceptions.Timeout, socket.timeout) as e:
                 last_error = e
-                simplified = "Connection timeout"
-                print(f"✗ {simplified} on attempt {attempt + 1}")
+                # Exit IP already logged by inner exception handler
                 if attempt >= max_retries - 1:
-                    print(f"✗ All {max_retries} attempts timed out")
+                    logger.error(f"✗ All {max_retries} attempts timed out")
 
             except Exception as e:
                 last_error = e
-                # Simplify verbose YouTube errors
-                simplified = simplify_error(str(e))
-                print(f"✗ {simplified} (attempt {attempt + 1})")
-
+                # Exit IP already logged by inner exception handler
                 if attempt >= max_retries - 1:
-                    print(f"✗ All {max_retries} attempts failed")
+                    simplified = simplify_error(str(e))
+                    logger.error(f"✗ All {max_retries} attempts failed")
 
         # Final error message
         if last_error:
             simplified_final = simplify_error(str(last_error))
-            print(f"Failed to fetch via Tor: {simplified_final}")
+            logger.error(f"Failed to fetch via Tor: {simplified_final}")
+
+        # Save tracker after all attempts exhausted
+        self.daily_tracker.save()
+
         return None
 
     def fetch_with_fallback(
         self,
         video_id: str,
-        use_tor_first: bool = True,
         languages: List[str] = ['en']
     ) -> Optional[Dict[str, Any]]:
         """
@@ -680,38 +913,37 @@ class TorTranscriptFetcher:
 
         Args:
             video_id: YouTube video ID
-            use_tor_first: Always True (Tor is primary method)
             languages: List of language codes
 
         Returns:
             Dictionary with transcript data or None if all methods failed
         """
         # Try Tor first (primary method)
-        print("Fetching transcript via Tor proxy...")
+        logger.info("Fetching transcript via Tor proxy...")
         result = self.fetch_transcript(video_id, languages)
 
         if result:
-            print("✓ Successfully fetched via Tor")
+            logger.success("✓ Successfully fetched via Tor")
             # Ensure method is set
             if 'method' not in result:
                 result['method'] = 'tor'
             return result
         else:
-            print("✗ Tor fetch failed")
+            logger.error("✗ Tor fetch failed")
 
             # Fall back to yt-dlp
-            print("Attempting yt-dlp fallback...")
+            logger.info("Attempting yt-dlp fallback...")
             ytdlp_result = self.ytdlp_fallback.fetch_transcript(
                 video_id, languages
             )
 
             if ytdlp_result:
-                print("✓ Successfully fetched via yt-dlp fallback")
+                logger.success("✓ Successfully fetched via yt-dlp fallback")
                 # Mark as yt-dlp method
                 ytdlp_result['method'] = 'yt-dlp'
                 return ytdlp_result
             else:
-                print("✗ YT-DLP fallback also failed")
+                logger.error("✗ YT-DLP fallback also failed")
                 return None
 
     def get_video_title(
@@ -747,10 +979,10 @@ class TorTranscriptFetcher:
 
             try:
                 if attempt > 0:
-                    print(f"  Rotating circuit before retry {attempt_num}...")
+                    logger.warning(f"  Rotating circuit before retry {attempt_num}...")
                     self.rotate_tor_circuit()
                     backoff = (2 ** attempt) + random.uniform(0, 0.5)
-                    print(f"  Waiting {backoff:.1f}s before retry...")
+                    logger.warning(f"  Waiting {backoff:.1f}s before retry...")
                     time.sleep(backoff)
 
                 response = self.session.get(
@@ -769,10 +1001,10 @@ class TorTranscriptFetcher:
                         last_response_data = response_data
                     else:
                         response_error = f"HTTP {response.status_code}"
-                        print(f"  ✗ HTTP {response.status_code} response")
+                        logger.error(f"  ✗ HTTP {response.status_code} response")
                 except Exception as json_err:
                     response_error = f"JSON parse error: {json_err}"
-                    print(f"  ✗ Could not parse JSON: {json_err}")
+                    logger.error(f"  ✗ Could not parse JSON: {json_err}")
 
                 logger.log_api_response(
                     video_id=video_id,
@@ -799,13 +1031,13 @@ class TorTranscriptFetcher:
                             total_attempts=attempt_num,
                             worker_id=worker_id
                         )
-                        print(f"  ✓ Title: {result}")
+                        logger.success(f"  ✓ Title: {result}")
 
                         if return_status:
                             return result, True, None
                         return result
                     else:
-                        print(f"  ✗ No 'title' field in response")
+                        logger.error(f"  ✗ No 'title' field in response")
                         logger.log_api_response(
                             video_id=video_id,
                             url=url,
@@ -819,7 +1051,7 @@ class TorTranscriptFetcher:
             except requests.exceptions.Timeout as e:
                 last_error = e
                 error_msg = f"Timeout after {timeout * (1.5 ** attempt):.1f}s"
-                print(f"  ✗ {error_msg}")
+                logger.error(f"  ✗ {error_msg}")
                 logger.log_api_response(
                     video_id=video_id,
                     url=url,
@@ -833,7 +1065,7 @@ class TorTranscriptFetcher:
             except Exception as e:
                 last_error = e
                 error_msg = str(e)
-                print(f"  ✗ Error: {error_msg}")
+                logger.error(f"  ✗ Error: {error_msg}")
                 logger.log_api_response(
                     video_id=video_id,
                     url=url,
@@ -846,7 +1078,7 @@ class TorTranscriptFetcher:
 
         # All attempts failed
         fallback = f"Video_{video_id}"
-        print(f"  ✗ All {max_retries} attempts failed, using fallback: {fallback}")
+        logger.error(f"  ✗ All {max_retries} attempts failed, using fallback: {fallback}")
 
         # Determine reason for failure
         error_reason = None
@@ -860,7 +1092,7 @@ class TorTranscriptFetcher:
                 error_reason = "Connection error"
             else:
                 error_reason = f"API error: {error_str[:50]}"
-            print(f"  Last error: {error_reason}")
+            logger.error(f"  Last error: {error_reason}")
 
         logger.log_title_result(
             video_id=video_id,
@@ -880,28 +1112,28 @@ if __name__ == "__main__":
     import concurrent.futures
 
     # Example 1: Single fetcher (original usage)
-    print("=== Example 1: Single Fetcher ===")
+    logger.info("=== Example 1: Single Fetcher ===")
     fetcher = TorTranscriptFetcher()
 
     if fetcher.check_tor_connection():
-        print("✓ Tor proxy is working!")
+        logger.success("✓ Tor proxy is working!")
 
         video_id = "dQw4w9WgXcQ"  # Rick Astley - Never Gonna Give You Up
         transcript = fetcher.fetch_with_fallback(video_id)
 
         if transcript:
-            print(f"✓ Successfully fetched {len(transcript['segments'])} transcript segments")
-            print(f"Total length: {transcript['length']} characters")
-            print(f"Duration: {transcript['duration']}")
+            logger.success(f"✓ Successfully fetched {len(transcript['segments'])} transcript segments")
+            logger.info(f"Total length: {transcript['length']} characters")
+            logger.info(f"Duration: {transcript['duration']}")
     else:
-        print("✗ Tor proxy not working. Check your setup.")
-        print(f"Make sure Tor is running on {fetcher.tor_host}:{fetcher.tor_port}")
+        logger.error("✗ Tor proxy not working. Check your setup.")
+        logger.info(f"Make sure Tor is running on {fetcher.tor_host}:{fetcher.tor_port}")
 
     # Example 2: Pool with multiple workers (recommended for parallel processing)
-    print("\n=== Example 2: Pool with Multiple Workers ===")
-    print("NOTE: For true unique exit nodes, you need either:")
-    print("  1. Multiple Tor instances on different ports, OR")
-    print("  2. Circuit rotation with enforcement_unique_exits=True (automatic)")
+    logger.debug("\n=== Example 2: Pool with Multiple Workers ===")
+    logger.info("NOTE: For true unique exit nodes, you need either:")
+    logger.info("  1. Multiple Tor instances on different ports, OR")
+    logger.info("  2. Circuit rotation with enforcement_unique_exits=True (automatic)")
 
     # Create pool with 5 connections
     # This will enforce unique exit IPs by rotating circuits if needed
@@ -925,7 +1157,7 @@ if __name__ == "__main__":
         try:
             # Acquire connection from pool (auto-releases on exit)
             with pool.acquire(worker_id=worker_id) as fetcher:
-                print(f"Worker {worker_id}: Processing {video_id}")
+                logger.debug(f"Worker {worker_id}: Processing {video_id}")
                 transcript = fetcher.fetch_with_fallback(video_id)
 
                 if transcript:
@@ -960,21 +1192,21 @@ if __name__ == "__main__":
         results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
     # Print results
-    print("\n=== Results ===")
+    logger.info("\n=== Results ===")
     for result in results:
         if result['success']:
-            print(f"✓ Worker {result['worker_id']}: {result['video_id']} - "
-                  f"{result['length']} chars, {result['duration']}")
+            logger.success(f"✓ Worker {result['worker_id']}: {result['video_id']} - "
+                          f"{result['length']} chars, {result['duration']}")
         else:
             error = result.get('error', 'Unknown error')
-            print(f"✗ Worker {result['worker_id']}: {result['video_id']} - {error}")
+            logger.error(f"✗ Worker {result['worker_id']}: {result['video_id']} - {error}")
 
     # Show pool statistics
     stats = pool.get_stats()
-    print(f"\n=== Pool Statistics ===")
-    print(f"Connections: {stats['in_use']}/{stats['pool_size']} in use "
-          f"({stats['utilization']:.1%} utilization)")
-    print(f"Unique exit IPs: {stats['unique_exit_ips']}/{stats['in_use']}")
-    print(f"All unique: {'✓ YES' if stats['all_unique'] else '✗ NO'}")
+    logger.info(f"\n=== Pool Statistics ===")
+    logger.info(f"Connections: {stats['in_use']}/{stats['pool_size']} in use "
+                f"({stats['utilization']:.1%} utilization)")
+    logger.info(f"Unique exit IPs: {stats['unique_exit_ips']}/{stats['in_use']}")
+    logger.error(f"All unique: {'✓ YES' if stats['all_unique'] else '✗ NO'}")
     if stats['active_exit_ips']:
-        print(f"Active IPs: {', '.join(stats['active_exit_ips'])}")
+        logger.info(f"Active IPs: {', '.join(stats['active_exit_ips'])}")

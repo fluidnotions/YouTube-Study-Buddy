@@ -6,6 +6,7 @@ Used when Tor-based fetching fails due to IP blocking or other issues.
 import re
 from typing import Optional, List, Dict, Any
 import yt_dlp
+from loguru import logger
 from .error_classifier import simplify_error
 
 
@@ -67,7 +68,7 @@ class YtDlpFallback:
                             break
 
                 if not transcript_text:
-                    print("No subtitles found for requested languages")
+                    logger.info("No subtitles found for requested languages")
                     return None
 
                 # Clean up transcript
@@ -89,7 +90,7 @@ class YtDlpFallback:
 
         except Exception as e:
             simplified = simplify_error(str(e))
-            print(f"YT-DLP fallback failed: {simplified}")
+            logger.error(f"YT-DLP fallback failed: {simplified}")
             return None
 
     def _download_and_parse_subtitle(
@@ -146,7 +147,7 @@ class YtDlpFallback:
                         if text_parts:
                             return ' '.join(text_parts)
             except Exception as e:
-                print(f"  Failed to extract from VTT: {e}")
+                logger.error(f"  Failed to extract from VTT: {e}")
                 continue
 
         return None
@@ -198,7 +199,7 @@ class YtDlpFallback:
                         segment_text = self._parse_vtt_content(response.text)
                         text_parts.extend(segment_text)
                 except Exception as e:
-                    print(f"  Failed to download M3U segment {line[:50]}...: {e}")
+                    logger.error(f"  Failed to download M3U segment {line[:50]}...: {e}")
                     continue
 
         return text_parts
@@ -226,5 +227,5 @@ class YtDlpFallback:
                 return clean_title[:100]
 
         except Exception as e:
-            print(f"YT-DLP title fetch failed: {e}")
+            logger.error(f"YT-DLP title fetch failed: {e}")
             return f"Video_{video_id}"

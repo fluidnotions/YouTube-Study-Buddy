@@ -11,6 +11,7 @@ from stem import Signal
 from stem.control import Controller
 
 from .exit_node_tracker import get_tracker
+from loguru import logger
 
 
 class RotatingTorClient:
@@ -109,14 +110,14 @@ class RotatingTorClient:
                 # Wait for Tor to be ready
                 wait_time = controller.get_newnym_wait()
                 if wait_time > 0:
-                    print(f"  Waiting {wait_time:.0f}s for Tor cooldown...")
+                    logger.info(f"  Waiting {wait_time:.0f}s for Tor cooldown...")
                     time.sleep(wait_time)
                 else:
                     # Default wait if no cooldown
                     time.sleep(2)
 
         except Exception as e:
-            print(f"⚠️  Circuit rotation failed: {e}")
+            logger.error(f"⚠️  Circuit rotation failed: {e}")
             time.sleep(2)  # Wait anyway
 
     def _ensure_fresh_exit_ip(self, force_rotation: bool = False) -> str:
@@ -145,9 +146,9 @@ class RotatingTorClient:
                 remaining = self.tracker.get_cooldown_remaining(exit_ip)
 
                 if remaining is None:
-                    print(f"✓ Fresh exit IP: {exit_ip} (never used)")
+                    logger.success(f"✓ Fresh exit IP: {exit_ip} (never used)")
                 else:
-                    print(f"✓ Fresh exit IP: {exit_ip}")
+                    logger.success(f"✓ Fresh exit IP: {exit_ip}")
 
                 # Record usage
                 self.tracker.record_use(exit_ip)
@@ -157,12 +158,12 @@ class RotatingTorClient:
             cooldown_remaining = self.tracker.get_cooldown_remaining(exit_ip)
             if cooldown_remaining:
                 hours_remaining = cooldown_remaining / 3600
-                print(f"  Exit IP {exit_ip} in cooldown ({hours_remaining:.1f}h remaining)")
+                logger.info(f"  Exit IP {exit_ip} in cooldown ({hours_remaining:.1f}h remaining)")
             else:
-                print(f"  Exit IP {exit_ip} was used recently")
+                logger.info(f"  Exit IP {exit_ip} was used recently")
 
             # Rotate to new circuit
-            print(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
+            logger.debug(f"  Rotating circuit (attempt {attempt + 1}/{self.max_rotation_attempts})...")
             self._rotate_circuit()
 
         # Failed to get fresh IP
@@ -262,5 +263,5 @@ class RotatingTorClient:
 
     def force_rotation(self):
         """Force circuit rotation to get new exit IP."""
-        print("🔄 Forcing circuit rotation...")
+        logger.info("🔄 Forcing circuit rotation...")
         self._ensure_fresh_exit_ip(force_rotation=True)

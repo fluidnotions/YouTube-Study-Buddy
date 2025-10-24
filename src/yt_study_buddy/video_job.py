@@ -60,6 +60,7 @@ class VideoProcessingJob:
     video_title: Optional[str] = None
     transcript: Optional[str] = None
     transcript_data: Optional[Dict[str, Any]] = None  # duration, length, segments, method
+    needs_ai_title: bool = False  # True if title fetch failed and we need AI to suggest one
 
     # ========================================================================
     # Stage 2: Content Generation

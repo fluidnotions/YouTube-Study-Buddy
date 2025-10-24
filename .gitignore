@@ -7,12 +7,14 @@
 .idea/
 
 # Project specific
-docs/learning
+docs/
+scripts/
 urls.txt
 test_urls.txt
 /autofix.log
-/notes/**
-/debug_logs/**
+notes/
+debug_logs/
+data/
 CLAUDE.md
 
 # Python
@@ -24,7 +26,6 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-/debug_logs/
 
 # Node.js / Electron
 node_modules/
@@ -35,4 +36,3 @@ dist-electron/
 *.dmg
 *.exe
 *.msi
-/debug_logs/
